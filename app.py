@@ -1,3 +1,4 @@
+# app.py (seu arquivo Streamlit existente, com as modificações)
 import streamlit as st
 import pandas as pd
 import hashlib
@@ -7,6 +8,7 @@ import string
 import uuid
 from datetime import datetime
 import time
+import requests # Importar requests para fazer a requisição à sua API local
 
 # Configuração inicial da página Streamlit
 st.set_page_config(page_title="Cripto Fácil", page_icon="🟧₿", layout="wide")
@@ -98,14 +100,42 @@ def save_operacoes(df):
     df['data_operacao'] = df['data_operacao'].dt.strftime('%Y-%m-%d %H:%M:%S')
     df.to_csv(OPERACOES_FILE, index=False)
 
-# --- Simulação de API de Criptomoedas ---
+# --- Integração com a API Local de Criptomoedas ---
+# URL da sua API Flask local (certifique-se de que ela esteja rodando!)
+LOCAL_CRYPTO_API_URL = "http://127.0.0.1:5000/cryptocurrencies"
+
 @st.cache_data
 def fetch_cryptocurrencies_from_api():
     """
-    Simula a chamada a uma API externa (e.g., CoinMarketCap) para obter uma lista de criptomoedas.
+    Busca a lista de criptomoedas da sua API local (que por sua vez consulta o CoinGecko).
     """
-    time.sleep(0.5)
-    return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "SHIB", "DOT", "MATIC"]
+    try:
+        response = requests.get(LOCAL_CRYPTO_API_URL)
+        response.raise_for_status() # Lança um erro para respostas HTTP ruins (4xx ou 5xx)
+        all_cryptos_data = response.json()
+
+        # O CoinGecko retorna uma lista de dicionários com 'id', 'symbol', 'name'.
+        # Podemos pegar o 'symbol' para o seletor.
+        # Filtra para garantir que apenas criptos com um símbolo válido sejam incluídas
+        cryptocurrencies = sorted([crypto['symbol'].upper() for crypto in all_cryptos_data if 'symbol' in crypto and crypto['symbol']])
+
+        # Se a lista estiver vazia (ex: erro na API local ou CoinGecko não retornou nada),
+        # forneça uma lista padrão para evitar erros no seletor.
+        if not cryptocurrencies:
+            st.warning("Não foi possível obter criptomoedas da API local. Usando lista de fallback.")
+            return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "SHIB", "DOT", "MATIC"]
+
+        return cryptocurrencies
+
+    except requests.exceptions.ConnectionError:
+        st.error(f"Erro de conexão com a API local de criptomoedas. Verifique se {LOCAL_CRYPTO_API_URL} está rodando.")
+        return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "SHIB", "DOT", "MATIC"] # Fallback
+    except requests.exceptions.RequestException as e:
+        st.error(f"Erro ao buscar criptomoedas da API local: {e}")
+        return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "SHIB", "DOT", "MATIC"] # Fallback
+    except Exception as e:
+        st.error(f"Ocorreu um erro inesperado ao processar os dados de criptomoedas: {e}")
+        return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "SHIB", "DOT", "MATIC"] # Fallback
 
 # --- Funções para Exibição do Dashboard ---
 def show_dashboard():
@@ -470,6 +500,7 @@ def show_wallet_details():
     with st.form("form_nova_operacao"):
         current_op_type = st.session_state['current_tipo_operacao']
 
+        # Agora, esta função chama sua API Flask local
         cryptocurrencies = fetch_cryptocurrencies_from_api()
         cripto = st.selectbox("Criptomoeda", options=cryptocurrencies, key="cripto_select")
 
@@ -706,10 +737,10 @@ def show_wallet_details():
                 st.write(f"R$ {op_row['custo_total']:.2f}") # Custo total já está em BRL
             with cols[6]:
                 if op_row['tipo_operacao'] == 'Compra' and pd.notna(op_row['preco_medio_compra_na_op']):
-                    st.write(f'R$ {op_row["preco_medio_compra_na_op"]:.2f}') # LINHA CORRIGIDA AQUI
+                    st.write(f'R$ {op_row["preco_medio_compra_na_op']:.2f}') # LINHA CORRIGIDA AQUI
                 elif op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['preco_medio_compra_na_op']):
                     # Para vendas, o preço médio de compra na operação é o preço médio ponderado de aquisição
-                    st.write(f'R$ {op_row["preco_medio_compra_na_op"]:.2f}')
+                    st.write(f'R$ {op_row["preco_medio_compra_na_op']:.2f}')
                 else:
                     st.write("-")
             with cols[7]:
