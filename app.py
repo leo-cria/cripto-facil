@@ -35,6 +35,16 @@ def hash_password(password):
     """Gera um hash SHA256 da senha fornecida para armazenamento seguro."""
     return hashlib.sha256(password.encode()).hexdigest()
 
+def send_recovery_code(email):
+    """
+    Simula o envio de um código de recuperação para o e-mail do usuário.
+    Armazena o código e o e-mail na sessão para verificação posterior.
+    """
+    code = "".join(random.choices(string.digits, k=6))
+    st.session_state["recovery_code"] = code
+    st.session_state["reset_email"] = email
+    st.success(f"Código enviado para {email} 🔐 (simulado: **{code}**)")
+
 def load_carteiras():
     """
     Carrega os dados das carteiras do arquivo CSV.
@@ -271,7 +281,7 @@ def show_dashboard():
 
                 st.markdown(f"""
                 <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-top:20px;">
-                    <h4 style="color:#ff0000; margin-top:0;'>⚠️ Confirmar Exclusão de Carteira</h4>
+                    <h4 style="color:#ff0000; margin-top:0;">⚠️ Confirmar Exclusão de Carteira</h4>
                     <p>Tem certeza que deseja excluir a carteira <strong>"{wallet_name}"</strong>?</p>
                     <p style="color:#ff0000; font-weight:bold;">Isso também excluirá TODAS as operações associadas a ela!</p>
                 </div>
@@ -398,7 +408,7 @@ def show_wallet_details():
     # Criar DataFrame para o portfólio detalhado
     portfolio_df = pd.DataFrame.from_dict(portfolio_detail, orient='index').reset_index()
     if not portfolio_df.empty:
-        portfolio_df.columns = ['Cripto', 'Quantidade', 'Custo Total', 'Preço Médio', 'Lucro Realizado']
+        portfolio_df.columns = ['Cripto', 'Quantidade', 'Custo Total', 'Custo Médio', 'Lucro Realizado']
         portfolio_df = portfolio_df[portfolio_df['Quantidade'] > 0] # Filtrar só as que tem saldo > 0
 
         # Calcular o Custo Total da Carteira com base no portfolio_df filtrado
@@ -420,7 +430,7 @@ def show_wallet_details():
         # Ordenar por 'Custo Total' em ordem decrescente
         portfolio_df = portfolio_df.sort_values(by='Custo Total', ascending=False)
 
-        col_names_portfolio = ["Cripto", "Quantidade", "Custo Total", "Preço Médio", "Lucro Realizado"]
+        col_names_portfolio = ["Cripto", "Quantidade", "Custo Total", "Custo Médio", "Lucro Realizado"]
         cols_ratio_portfolio = [0.15, 0.20, 0.20, 0.20, 0.25]
 
         cols_portfolio = st.columns(cols_ratio_portfolio)
@@ -484,7 +494,7 @@ def show_wallet_details():
 
         custo_total_input = st.number_input(valor_label_base, min_value=0.01, format="%.2f", key="custo_total_input")
 
-        ptax_input = 0.0 # Default para carteiras nacionais, ou se não for informada
+        ptax_input = 1.0 # Default para carteiras nacionais, ou se não for informada
         valor_em_brl_preview = 0.0
 
         if is_foreign_wallet:
@@ -492,16 +502,16 @@ def show_wallet_details():
                 "Taxa PTAX (BRL por USDT)",
                 min_value=0.01,
                 format="%.4f",
-                value=0.00, # Valor padrão para teste, pode ser alterado
+                value=5.00, # Valor padrão para teste, pode ser alterado
                 key="ptax_input"
             )
-            
             # Removendo a prévia do valor em BRL para carteiras estrangeiras
             # valor_em_brl_preview = custo_total_input * ptax_input
             # st.info(f"Prévia do valor em BRL: R$ {valor_em_brl_preview:,.2f}")
             valor_em_brl_preview = custo_total_input * ptax_input # Calcular para salvar, mas não exibir
         else:
             valor_em_brl_preview = custo_total_input
+
 
         data_operacao = st.date_input("Data da Operação", value="today", key="data_op_input")
         hora_operacao = st.time_input("Hora da Operação", value=datetime.now().time(), key="hora_op_input")
@@ -587,7 +597,7 @@ def show_wallet_details():
 
                 st.markdown(f"""
                 <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-bottom:20px;">
-                    <h4 style="color:#ff0000; margin-top:0;'>⚠️ Confirmar Exclusão de Operação</h4>
+                    <h4 style="color:#ff0000; margin-top:0;">⚠️ Confirmar Exclusão de Operação</h4>
                     <p>Tem certeza que deseja excluir a operação:<br> <strong>"{op_info_display}"</strong>?</p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -706,10 +716,10 @@ def show_wallet_details():
                 st.write(f"R$ {op_row['custo_total']:.2f}") # Custo total já está em BRL
             with cols[6]:
                 if op_row['tipo_operacao'] == 'Compra' and pd.notna(op_row['preco_medio_compra_na_op']):
-                    st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}") # LINHA CORRIGIDA
+                    st.write(f'R$ {op_row["preco_medio_compra_na_op"]:.2f}') # LINHA CORRIGIDA AQUI
                 elif op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['preco_medio_compra_na_op']):
                     # Para vendas, o preço médio de compra na operação é o preço médio ponderado de aquisição
-                    st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}")
+                    st.write(f'R$ {op_row["preco_medio_compra_na_op"]:.2f}')
                 else:
                     st.write("-")
             with cols[7]:
@@ -828,6 +838,8 @@ if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "pagina_atual" not in st.session_state:
     st.session_state["pagina_atual"] = "Portfólio"
+if "auth_page" not in st.session_state:
+    st.session_state["auth_page"] = "login" # Garante que a página de auth padrão seja 'login'
 
 if 'accessed_wallet_id' not in st.session_state:
     st.session_state['accessed_wallet_id'] = None
@@ -837,9 +849,9 @@ if 'confirm_delete_wallet_id' not in st.session_state:
 if 'confirm_delete_operation_id' not in st.session_state:
     st.session_state['confirm_delete_operation_id'] = None
 
-if "auth_page" not in st.session_state:
-    st.session_state["auth_page"] = "login" # Garante que a página de auth padrão seja 'login'
-
+# A lógica de persistência de login é a maneira como você inicializa 'logged_in' e 'cpf'
+# Se 'logged_in' já é True na sessão (o que acontece em uma atualização se não for resetado explicitamente),
+# então o usuário permanece logado.
 if st.session_state["logged_in"]:
     show_dashboard()
 else:
