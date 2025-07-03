@@ -8,9 +8,6 @@ import uuid
 from datetime import datetime
 import time
 
-# No início do script (antes de qualquer lógica de inicialização de session_state)
-st.write(f"Estado de logged_in no início da execução: {st.session_state.get('logged_in', 'Não Definido')}")
-
 # Configuração inicial da página Streamlit
 st.set_page_config(page_title="Cripto Fácil", page_icon="🟧₿", layout="wide")
 
@@ -719,10 +716,10 @@ def show_wallet_details():
                 st.write(f"R$ {op_row['custo_total']:.2f}") # Custo total já está em BRL
             with cols[6]:
                 if op_row['tipo_operacao'] == 'Compra' and pd.notna(op_row['preco_medio_compra_na_op']):
-                    st.write(f'R$ {op_row["preco_medio_compra_na_op"]:.2f}')
+                    st.write(f'R$ {op_row["preco_medio_compra_na_op']:.2f}')
                 elif op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['preco_medio_compra_na_op']):
                     # Para vendas, o preço médio de compra na operação é o preço médio ponderado de aquisição
-                    st.write(f'R$ {op_row["preco_medio_compra_na_op"]:.2f}')
+                    st.write(f'R$ {op_row["preco_medio_compra_na_op']:.2f}')
                 else:
                     st.write("-")
             with cols[7]:
@@ -838,7 +835,7 @@ def show_login():
 # Inicialização do session_state de forma robusta
 # Certifica-se de que st.session_state seja inicializado apenas uma vez
 if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
+    st.session_state["logged_in"] = True # Alterado de False para True, conforme sua instrução
 if "pagina_atual" not in st.session_state:
     st.session_state["pagina_atual"] = "Portfólio"
 if "auth_page" not in st.session_state:
