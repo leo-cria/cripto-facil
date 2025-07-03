@@ -96,6 +96,11 @@ def load_operacoes():
 
 
         df['data_operacao'] = pd.to_datetime(df['data_operacao'], errors='coerce')
+        
+        # Garante que a coluna 'cripto' seja do tipo string para evitar 'nan' literal
+        if 'cripto' in df.columns:
+            df['cripto'] = df['cripto'].astype(str).replace('nan', '') # Substitui 'nan' string por vazio
+        
         return df
     return pd.DataFrame(columns=[
         "id", "wallet_id", "cpf_usuario", "tipo_operacao", "cripto",
@@ -190,7 +195,7 @@ def show_dashboard():
                 atual = st.text_input("Senha atual", type="password")
                 nova = st.text_input("Nova senha", type="password")
                 confirmar = st.text_input("Confirme a senha", type="password")
-                ok = st.form_submit_button("Alterar senha 🔑")
+                ok = st.form_submit_button("Alterar senha �")
                 if ok:
                     if hash_password(atual) != usuario['password_hash']:
                         st.error("Senha atual incorreta.")
@@ -516,6 +521,7 @@ def show_wallet_details():
         selected_crypto = display_name_to_crypto_map.get(selected_display_name)
 
         # Exibe a logo e o nome completo da criptomoeda selecionada abaixo do selectbox
+        # Garante que selected_crypto não é None antes de tentar acessar suas chaves
         if selected_crypto:
             st.markdown(
                 f"<img src='{selected_crypto['image']}' width='30' height='30' style='vertical-align:middle; margin-right:10px;'> "
@@ -524,7 +530,9 @@ def show_wallet_details():
             )
             cripto_symbol = selected_crypto['symbol'] # Atribui o símbolo para uso posterior
         else:
-            cripto_symbol = "" # Garante que cripto_symbol seja vazio se nada for selecionado
+            # Se nada for selecionado ou ocorrer um problema, defina um símbolo vazio
+            cripto_symbol = "" 
+            st.warning("Por favor, selecione uma criptomoeda válida.")
 
 
         # Campo de quantidade para garantir tratamento decimal
@@ -549,9 +557,6 @@ def show_wallet_details():
                 value=5.00, # Valor padrão para teste, pode ser alterado
                 key="ptax_input"
             )
-            # Removendo a prévia do valor em BRL para carteiras estrangeiras
-            # valor_em_brl_preview = custo_total_input * ptax_input
-            # st.info(f"Prévia do valor em BRL: R$ {valor_em_brl_preview:,.2f}")
             valor_em_brl_preview = custo_total_input * ptax_input # Calcular para salvar, mas não exibir
         else:
             valor_em_brl_preview = custo_total_input
@@ -563,7 +568,10 @@ def show_wallet_details():
         submitted_op = st.form_submit_button("Registrar Operação ✅")
 
         if submitted_op:
-            if not cripto_symbol or quantidade <= 0 or custo_total_input <= 0:
+            # Validação para garantir que uma criptomoeda foi selecionada
+            if not cripto_symbol:
+                st.error("Por favor, selecione uma criptomoeda antes de registrar a operação.")
+            elif quantidade <= 0 or custo_total_input <= 0:
                 st.error("Por favor, preencha todos os campos da operação corretamente.")
             elif is_foreign_wallet and ptax_input <= 0:
                 st.error("Por favor, informe uma taxa PTAX válida para carteiras estrangeiras.")
@@ -611,7 +619,7 @@ def show_wallet_details():
                     "wallet_id": wallet_id,
                     "cpf_usuario": user_cpf,
                     "tipo_operacao": current_op_type,
-                    "cripto": cripto_symbol, # Salva o símbolo real da criptomoeda
+                    "cripto": str(cripto_symbol), # Garante que o símbolo é salvo como string
                     "quantidade": float(quantidade), # Garante que a quantidade é salva como float
                     "custo_total": custo_total_final_brl, # Salva o valor já convertido para BRL
                     "data_operacao": data_hora_completa,
@@ -730,9 +738,13 @@ def show_wallet_details():
 
     if not filtered_operations.empty:
         # Mapear símbolos para display_name (com imagem) para exibição na tabela
-        symbol_to_display_name_map = {crypto['symbol']: f"<img src='{crypto['image']}' width='20' height='20' style='vertical-align:middle; margin-right:5px;'> {crypto['display_name']}" for crypto in cryptocurrencies_data}
-        filtered_operations['cripto_display'] = filtered_operations['cripto'].map(symbol_to_display_name_map)
-
+        # Usar .get com um valor padrão para lidar com símbolos ausentes (como 'nan')
+        symbol_to_full_crypto_info_map = {crypto['symbol']: crypto for crypto in cryptocurrencies_data}
+        
+        filtered_operations['cripto_display'] = filtered_operations['cripto'].apply(
+            lambda symbol: f"<img src='{symbol_to_full_crypto_info_map[symbol]['image']}' width='20' height='20' style='vertical-align:middle; margin-right:5px;'> {symbol_to_full_crypto_info_map[symbol]['display_name']}"
+            if symbol in symbol_to_full_crypto_info_map else str(symbol) # Exibe o símbolo original se não encontrado
+        )
 
         # Definindo as colunas e seus respectivos ratios
         col_names = [
@@ -741,9 +753,7 @@ def show_wallet_details():
             "P. Médio Venda", "Lucro/Prejuízo", "Data/Hora", "Origem", "Ações"
         ]
         # Ajustando os ratios das colunas para dar mais espaço à 'Ações'
-        # Exemplo de ajuste: [0.06, 0.06, 0.09, 0.07, 0.11, 0.11, 0.11, 0.11, 0.11, 0.11, 0.07, 0.08]
-        # (Soma total deve ser 1.0 ou próximo)
-        cols_ratio = [0.06, 0.09, 0.09, 0.07, 0.11, 0.11, 0.11, 0.11, 0.11, 0.11, 0.07, 0.07] # Ajustei para 0.07 para 'Ações' e rebalanceei
+        cols_ratio = [0.06, 0.09, 0.09, 0.07, 0.11, 0.11, 0.11, 0.11, 0.11, 0.11, 0.07, 0.07] 
 
         cols = st.columns(cols_ratio)
         for i, col_name in enumerate(col_names):
@@ -758,7 +768,7 @@ def show_wallet_details():
             with cols[0]:
                 st.write(op_row['tipo_operacao'])
             with cols[1]:
-                # Exibe a cripto com a imagem
+                # Exibe a cripto com a imagem ou o símbolo original
                 st.markdown(op_row['cripto_display'], unsafe_allow_html=True)
             with cols[2]:
                 st.write(f"{op_row['quantidade']:.8f}") # Garante 8 casas decimais na exibição
@@ -776,7 +786,7 @@ def show_wallet_details():
                 st.write(f"R$ {op_row['custo_total']:.2f}") # Custo total já está em BRL
             with cols[6]:
                 if op_row['tipo_operacao'] == 'Compra' and pd.notna(op_row['preco_medio_compra_na_op']):
-                    st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}") # LINHA CORRIGIDA
+                    st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}") 
                 elif op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['preco_medio_compra_na_op']):
                     # Para vendas, o preço médio de compra na operação é o preço médio ponderado de aquisição
                     st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}")
@@ -895,11 +905,11 @@ def show_login():
 # Inicialização do session_state de forma robusta
 # Certifica-se de que st.session_state seja inicializado apenas uma vez
 if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False # Alterado de False para True, conforme sua instrução
+    st.session_state["logged_in"] = False 
 if "pagina_atual" not in st.session_state:
     st.session_state["pagina_atual"] = "Portfólio"
 if "auth_page" not in st.session_state:
-    st.session_state["auth_page"] = "login" # Garante que a página de auth padrão seja 'login'
+    st.session_state["auth_page"] = "login" 
 
 if 'accessed_wallet_id' not in st.session_state:
     st.session_state['accessed_wallet_id'] = None
