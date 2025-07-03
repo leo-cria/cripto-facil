@@ -1,13 +1,13 @@
+import streamlit as st
+import pandas as pd
 import hashlib
 import os
+import random
 import string
-import time
 import uuid
 from datetime import datetime
-from random import choices
-
-import pandas as pd
-import streamlit as st
+import time
+import plotly.express as px
 
 # Configuração inicial da página Streamlit
 st.set_page_config(page_title="Cripto Fácil", page_icon="🟧₿", layout="wide")
@@ -41,7 +41,7 @@ def send_recovery_code(email):
     Simula o envio de um código de recuperação para o e-mail do usuário.
     Armazena o código e o e-mail na sessão para verificação posterior.
     """
-    code = "".join(choices(string.digits, k=6))
+    code = "".join(random.choices(string.digits, k=6))
     st.session_state["recovery_code"] = code
     st.session_state["reset_email"] = email
     st.success(f"Código enviado para {email} 🔐 (simulado: **{code}**)")
@@ -515,7 +515,7 @@ def show_wallet_details():
 
 
         data_operacao = st.date_input("Data da Operação", value="today", key="data_op_input")
-        hora_operacao = st.time_input("Hora da Operação", value=datetime.datetime.now().time(), key="hora_op_input")
+        hora_operacao = st.time_input("Hora da Operação", value=datetime.now().time(), key="hora_op_input")
 
         submitted_op = st.form_submit_button("Registrar Operação ✅")
 
@@ -525,7 +525,7 @@ def show_wallet_details():
             elif is_foreign_wallet and ptax_input <= 0:
                 st.error("Por favor, informe uma taxa PTAX válida para carteiras estrangeiras.")
             else:
-                data_hora_completa = datetime.datetime.combine(data_operacao, hora_operacao)
+                data_hora_completa = datetime.combine(data_operacao, hora_operacao)
 
                 df_operacoes_existentes = load_operacoes()
 
