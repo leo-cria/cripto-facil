@@ -384,7 +384,7 @@ def show_wallet_details():
 
         # --- Calcular detalhes do portfólio atual por cripto ---
         for cripto_simbolo in wallet_ops_for_portfolio['cripto'].unique():
-            ops_cripto = wallet_ops_for_portfolio[wallet_ops_for_portfolio['cripto'] == cripto_simbolo]
+            ops_cripto = wallet_ops_for_portfolio[ops_cripto['cripto'] == cripto_simbolo]
 
             qtd_comprada = ops_cripto[ops_cripto['tipo_operacao'] == 'Compra']['quantidade'].sum()
             qtd_vendida = ops_cripto[ops_cripto['tipo_operacao'] == 'Venda']['quantidade'].sum()
@@ -497,27 +497,33 @@ def show_wallet_details():
         # Carrega a lista de dicionários de criptomoedas
         cryptocurrencies_data = load_cryptocurrencies_from_file()
         
-        # Cria uma lista de strings para exibição no selectbox, incluindo a imagem
-        display_options = []
-        # Mapeia o display_name para o símbolo real para fácil recuperação
-        display_to_symbol_map = {} 
-        for crypto in cryptocurrencies_data:
-            # Usar um tamanho fixo para a imagem para evitar CLS
-            display_str = f"<img src='{crypto['image']}' width='20' height='20' style='vertical-align:middle; margin-right:5px;'> {crypto['display_name']}"
-            display_options.append(display_str)
-            display_to_symbol_map[display_str] = crypto['symbol']
+        # Cria uma lista de strings para exibição no selectbox (apenas o display_name)
+        display_options = [crypto['display_name'] for crypto in cryptocurrencies_data]
+        
+        # Mapeia o display_name para o objeto completo da criptomoeda para fácil recuperação
+        display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data}
 
-        # O selectbox exibirá as strings formatadas com imagem e texto
+        # O selectbox exibirá apenas as strings de display_name
         selected_display_name = st.selectbox(
             "Criptomoeda", 
             options=display_options, 
             key="cripto_select",
-            format_func=lambda x: x, # Impede que o Streamlit escape o HTML
             help="Selecione a criptomoeda para a operação."
         )
 
-        # Recupera o símbolo real da criptomoeda selecionada
-        cripto_symbol = display_to_symbol_map.get(selected_display_name, "")
+        # Recupera o objeto completo da criptomoeda selecionada
+        selected_crypto = display_name_to_crypto_map.get(selected_display_name)
+
+        # Exibe a logo e o nome completo da criptomoeda selecionada abaixo do selectbox
+        if selected_crypto:
+            st.markdown(
+                f"<img src='{selected_crypto['image']}' width='30' height='30' style='vertical-align:middle; margin-right:10px;'> "
+                f"**{selected_crypto['symbol']}** - {selected_crypto['name']}", 
+                unsafe_allow_html=True
+            )
+            cripto_symbol = selected_crypto['symbol'] # Atribui o símbolo para uso posterior
+        else:
+            cripto_symbol = "" # Garante que cripto_symbol seja vazio se nada for selecionado
 
 
         # Campo de quantidade para garantir tratamento decimal
@@ -909,4 +915,3 @@ if st.session_state["logged_in"]:
     show_dashboard()
 else:
     show_login()
-
