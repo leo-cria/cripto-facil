@@ -837,6 +837,9 @@ if 'confirm_delete_wallet_id' not in st.session_state:
 if 'confirm_delete_operation_id' not in st.session_state:
     st.session_state['confirm_delete_operation_id'] = None
 
+if "auth_page" not in st.session_state:
+    st.session_state["auth_page"] = "login" # Garante que a página de auth padrão seja 'login'
+
 if st.session_state["logged_in"]:
     show_dashboard()
     else:
