@@ -7,7 +7,7 @@ import string
 import uuid
 from datetime import datetime
 import time
-import plotly.express as px
+import plotly as px
 
 # Configuração inicial da página Streamlit
 st.set_page_config(page_title="Cripto Fácil", page_icon="🟧₿", layout="wide")
