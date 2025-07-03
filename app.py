@@ -496,21 +496,12 @@ def show_wallet_details():
                 key="ptax_input"
             )
           
-# --- Adicionando o botão de prévia ---
-if st.button("Ver Prévia do Valor"):
-    valor_em_brl_preview = 0.0 # Inicializa com zero
-
-    if carteira_estrangeira:
-        # Valor da previa em BRL para carteiras estrangeiras
-        valor_em_brl_preview = custo_total_input * ptax_input
-        st.success(f"**Prévia do valor em BRL:** R$ {valor_em_brl_preview:,.2f}")
-    else:
-        valor_em_brl_preview = custo_total_input
-        st.info(f"**Prévia do valor (sem conversão PTAX):** R$ {valor_em_brl_preview:,.2f}")
-
-    # Este print é apenas para depuração e para mostrar que o valor está sendo salvo
-    # No Streamlit, você geralmente exibiria o valor com st.write, st.info, st.success, etc.
-    st.write(f"Valor calculado para salvar (não visível por padrão): {valor_em_brl_preview:,.2f}")
+ # Removendo a prévia do valor em BRL para carteiras estrangeiras
+            # valor_em_brl_preview = custo_total_input * ptax_input
+            # st.info(f"Prévia do valor em BRL: R$ {valor_em_brl_preview:,.2f}")
+            valor_em_brl_preview = custo_total_input * ptax_input # Calcular para salvar, mas não exibir
+        else:
+            valor_em_brl_preview = custo_total_input
 
         data_operacao = st.date_input("Data da Operação", value="today", key="data_op_input")
         hora_operacao = st.time_input("Hora da Operação", value=datetime.now().time(), key="hora_op_input")
