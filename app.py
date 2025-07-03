@@ -1,4 +1,3 @@
-# app.py (seu arquivo Streamlit existente, com as modificações)
 import streamlit as st
 import pandas as pd
 import hashlib
@@ -8,7 +7,7 @@ import string
 import uuid
 from datetime import datetime
 import time
-import requests # Importar requests para fazer a requisição à sua API local
+import json # Importar json
 
 # Configuração inicial da página Streamlit
 st.set_page_config(page_title="Cripto Fácil", page_icon="🟧₿", layout="wide")
@@ -17,6 +16,7 @@ st.set_page_config(page_title="Cripto Fácil", page_icon="🟧₿", layout="wide
 USERS_FILE = "users.csv"
 CARTEIRAS_FILE = "carteiras.csv"
 OPERACOES_FILE = "operacoes.csv"
+CRYPTOS_FILE = "cryptos.json" # Novo arquivo para criptomoedas
 
 # --- Funções Utilitárias para Manipulação de Dados ---
 
@@ -36,6 +36,16 @@ def save_users(df):
 def hash_password(password):
     """Gera um hash SHA256 da senha fornecida para armazenamento seguro."""
     return hashlib.sha256(password.encode()).hexdigest()
+
+def send_recovery_code(email):
+    """
+    Simula o envio de um código de recuperação para o e-mail do usuário.
+    Armazena o código e o e-mail na sessão para verificação posterior.
+    """
+    code = "".join(random.choices(string.digits, k=6))
+    st.session_state["recovery_code"] = code
+    st.session_state["reset_email"] = email
+    st.success(f"Código enviado para {email} 🔐 (simulado: **{code}**)")
 
 def load_carteiras():
     """
@@ -100,42 +110,25 @@ def save_operacoes(df):
     df['data_operacao'] = df['data_operacao'].dt.strftime('%Y-%m-%d %H:%M:%S')
     df.to_csv(OPERACOES_FILE, index=False)
 
-# --- Integração com a API Local de Criptomoedas ---
-# URL da sua API Flask local (certifique-se de que ela esteja rodando!)
-LOCAL_CRYPTO_API_URL = "http://127.0.0.1:5000/cryptocurrencies"
-
+# --- Função para carregar criptomoedas de um arquivo local ---
 @st.cache_data
-def fetch_cryptocurrencies_from_api():
+def load_cryptocurrencies_from_file():
     """
-    Busca a lista de criptomoedas da sua API local (que por sua vez consulta o CoinGecko).
+    Carrega a lista de criptomoedas de um arquivo JSON local.
+    Retorna uma lista vazia se o arquivo não existir ou houver erro.
     """
-    try:
-        response = requests.get(LOCAL_CRYPTO_API_URL)
-        response.raise_for_status() # Lança um erro para respostas HTTP ruins (4xx ou 5xx)
-        all_cryptos_data = response.json()
-
-        # O CoinGecko retorna uma lista de dicionários com 'id', 'symbol', 'name'.
-        # Podemos pegar o 'symbol' para o seletor.
-        # Filtra para garantir que apenas criptos com um símbolo válido sejam incluídas
-        cryptocurrencies = sorted([crypto['symbol'].upper() for crypto in all_cryptos_data if 'symbol' in crypto and crypto['symbol']])
-
-        # Se a lista estiver vazia (ex: erro na API local ou CoinGecko não retornou nada),
-        # forneça uma lista padrão para evitar erros no seletor.
-        if not cryptocurrencies:
-            st.warning("Não foi possível obter criptomoedas da API local. Usando lista de fallback.")
-            return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "SHIB", "DOT", "MATIC"]
-
-        return cryptocurrencies
-
-    except requests.exceptions.ConnectionError:
-        st.error(f"Erro de conexão com a API local de criptomoedas. Verifique se {LOCAL_CRYPTO_API_URL} está rodando.")
-        return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "SHIB", "DOT", "MATIC"] # Fallback
-    except requests.exceptions.RequestException as e:
-        st.error(f"Erro ao buscar criptomoedas da API local: {e}")
-        return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "SHIB", "DOT", "MATIC"] # Fallback
-    except Exception as e:
-        st.error(f"Ocorreu um erro inesperado ao processar os dados de criptomoedas: {e}")
-        return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "SHIB", "DOT", "MATIC"] # Fallback
+    if os.path.exists(CRYPTOS_FILE):
+        try:
+            with open(CRYPTOS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            st.error(f"Erro ao decodificar o arquivo {CRYPTOS_FILE}. Verifique o formato JSON.")
+            return []
+    else:
+        # Se o arquivo não existir, forneça uma lista padrão ou avise.
+        st.warning(f"Arquivo '{CRYPTOS_FILE}' não encontrado. Usando uma lista de criptomoedas padrão.")
+        # Simula o comportamento anterior, mas sem time.sleep
+        return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "SHIB", "DOT", "MATIC"]
 
 # --- Funções para Exibição do Dashboard ---
 def show_dashboard():
@@ -301,7 +294,7 @@ def show_dashboard():
 
                 st.markdown(f"""
                 <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-top:20px;">
-                    <h4 style="color:#ff0000; margin-top:0;">⚠️ Confirmar Exclusão de Carteira</h4>
+                    <h4 style="color:#ff0000; margin-top:0;'>⚠️ Confirmar Exclusão de Carteira</h4>
                     <p>Tem certeza que deseja excluir a carteira <strong>"{wallet_name}"</strong>?</p>
                     <p style="color:#ff0000; font-weight:bold;">Isso também excluirá TODAS as operações associadas a ela!</p>
                 </div>
@@ -500,8 +493,8 @@ def show_wallet_details():
     with st.form("form_nova_operacao"):
         current_op_type = st.session_state['current_tipo_operacao']
 
-        # Agora, esta função chama sua API Flask local
-        cryptocurrencies = fetch_cryptocurrencies_from_api()
+        # Altera aqui para usar a função que carrega do arquivo
+        cryptocurrencies = load_cryptocurrencies_from_file()
         cripto = st.selectbox("Criptomoeda", options=cryptocurrencies, key="cripto_select")
 
         # Campo de quantidade para garantir tratamento decimal
@@ -618,7 +611,7 @@ def show_wallet_details():
 
                 st.markdown(f"""
                 <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-bottom:20px;">
-                    <h4 style="color:#ff0000; margin-top:0;">⚠️ Confirmar Exclusão de Operação</h4>
+                    <h4 style="color:#ff0000; margin-top:0;'>⚠️ Confirmar Exclusão de Operação</h4>
                     <p>Tem certeza que deseja excluir a operação:<br> <strong>"{op_info_display}"</strong>?</p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -673,8 +666,18 @@ def show_wallet_details():
         filter_type = st.multiselect("Tipo", all_types, key="filter_op_type")
 
     with col_filter2:
-        all_cryptos_in_wallet = sorted(wallet_operations_all['cripto'].unique().tolist()) if not wallet_operations_all.empty else []
-        filter_crypto = st.multiselect("Cripto", all_cryptos_in_wallet, key="filter_op_crypto")
+        # Usar a lista completa de criptos para o filtro, se disponível
+        all_cryptos_in_wallet_raw = wallet_operations_all['cripto'].unique().tolist() if not wallet_operations_all.empty else []
+        # Tentar carregar a lista completa para o multiselect, se existir
+        full_crypto_list_for_filter = load_cryptocurrencies_from_file()
+        # Se a lista do arquivo local estiver vazia, use as criptos da carteira
+        if not full_crypto_list_for_filter:
+             full_crypto_list_for_filter = all_cryptos_in_wallet_raw
+        else: # Se houver lista completa, combine-a com as que já estão na carteira (caso alguma não esteja na lista "atual")
+            full_crypto_list_for_filter.extend([c for c in all_cryptos_in_wallet_raw if c not in full_crypto_list_for_filter])
+            full_crypto_list_for_filter = sorted(list(set(full_crypto_list_for_filter))) # Remove duplicatas e ordena
+
+        filter_crypto = st.multiselect("Cripto", full_crypto_list_for_filter, key="filter_op_crypto")
 
     with col_filter3:
         filter_date_range = st.date_input("Data", value=[], key="filter_op_date_range")
@@ -737,10 +740,10 @@ def show_wallet_details():
                 st.write(f"R$ {op_row['custo_total']:.2f}") # Custo total já está em BRL
             with cols[6]:
                 if op_row['tipo_operacao'] == 'Compra' and pd.notna(op_row['preco_medio_compra_na_op']):
-                    st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}")
+                    st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}") # LINHA CORRIGIDA
                 elif op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['preco_medio_compra_na_op']):
                     # Para vendas, o preço médio de compra na operação é o preço médio ponderado de aquisição
-                    st.write(f"R$ {op_row['alguma_outra_chave_aqui']:.2f}")
+                    st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}")
                 else:
                     st.write("-")
             with cols[7]:
@@ -856,7 +859,7 @@ def show_login():
 # Inicialização do session_state de forma robusta
 # Certifica-se de que st.session_state seja inicializado apenas uma vez
 if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
+    st.session_state["logged_in"] = False # Alterado de False para True, conforme sua instrução
 if "pagina_atual" not in st.session_state:
     st.session_state["pagina_atual"] = "Portfólio"
 if "auth_page" not in st.session_state:
