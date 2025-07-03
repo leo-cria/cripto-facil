@@ -7,7 +7,7 @@ import string
 import uuid
 from datetime import datetime
 import time
-import json # ESSENCIAL: Importa a biblioteca JSON
+import json
 
 # Configuração inicial da página Streamlit
 st.set_page_config(page_title="Cripto Fácil", page_icon="🟧₿", layout="wide")
@@ -16,7 +16,7 @@ st.set_page_config(page_title="Cripto Fácil", page_icon="🟧₿", layout="wide
 USERS_FILE = "users.csv"
 CARTEIRAS_FILE = "carteiras.csv"
 OPERACOES_FILE = "operacoes.csv"
-CRYPTOS_FILE = "cryptos.json" # Caminho para o arquivo JSON das criptomoedas
+CRYPTOS_FILE = "cryptos.json" # Novo arquivo para criptomoedas
 
 # --- Funções Utilitárias para Manipulação de Dados ---
 
@@ -110,26 +110,26 @@ def save_operacoes(df):
     df['data_operacao'] = df['data_operacao'].dt.strftime('%Y-%m-%d %H:%M:%S')
     df.to_csv(OPERACOES_FILE, index=False)
 
-# --- FUNÇÃO PRINCIPAL QUE LÊ O ARQUIVO JSON ---
+# --- Função para carregar criptomoedas de um arquivo local ---
 @st.cache_data
 def load_cryptocurrencies_from_file():
     """
     Carrega a lista de criptomoedas de um arquivo JSON local.
     Retorna uma lista vazia se o arquivo não existir ou houver erro.
+    O formato esperado é uma lista de dicionários com 'symbol', 'name', 'image' e 'display_name'.
     """
     if os.path.exists(CRYPTOS_FILE):
         try:
             with open(CRYPTOS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                cryptos_data = json.load(f)
+                # Retorna a lista de dicionários, onde cada dicionário tem 'symbol', 'name', 'image' e 'display_name'
+                return cryptos_data
         except json.JSONDecodeError:
             st.error(f"Erro ao decodificar o arquivo {CRYPTOS_FILE}. Verifique o formato JSON.")
             return []
     else:
-        # Se o arquivo não existir, forneça uma lista padrão ou avise.
-        st.warning(f"Arquivo '{CRYPTOS_FILE}' não encontrado. Usando uma lista de criptomoedas padrão.")
-        # Esta lista padrão é um fallback caso o JSON não seja encontrado ou esteja vazio.
-        return ["BTC - Bitcoin", "ETH - Ethereum", "SOL - Solana", "ADA - Cardano", "XRP - Ripple", "BNB - Binance Coin", "DOGE - Dogecoin", "SHIB - Shiba Inu", "DOT - Polkadot", "MATIC - Polygon"]
-
+        st.warning(f"Arquivo '{CRYPTOS_FILE}' não encontrado. Execute 'gerar_cryptos_json.py' para criá-lo.")
+        return [] # Retorna uma lista vazia se o arquivo não existir
 
 # --- Funções para Exibição do Dashboard ---
 def show_dashboard():
@@ -494,9 +494,31 @@ def show_wallet_details():
     with st.form("form_nova_operacao"):
         current_op_type = st.session_state['current_tipo_operacao']
 
-        # AQUI É ONDE SEU APP LÊ A LISTA DE CRIPTOMOEDAS DO JSON!
-        cryptocurrencies = load_cryptocurrencies_from_file()
-        cripto = st.selectbox("Criptomoeda", options=cryptocurrencies, key="cripto_select")
+        # Carrega a lista de dicionários de criptomoedas
+        cryptocurrencies_data = load_cryptocurrencies_from_file()
+        
+        # Cria uma lista de strings para exibição no selectbox, incluindo a imagem
+        display_options = []
+        # Mapeia o display_name para o símbolo real para fácil recuperação
+        display_to_symbol_map = {} 
+        for crypto in cryptocurrencies_data:
+            # Usar um tamanho fixo para a imagem para evitar CLS
+            display_str = f"<img src='{crypto['image']}' width='20' height='20' style='vertical-align:middle; margin-right:5px;'> {crypto['display_name']}"
+            display_options.append(display_str)
+            display_to_symbol_map[display_str] = crypto['symbol']
+
+        # O selectbox exibirá as strings formatadas com imagem e texto
+        selected_display_name = st.selectbox(
+            "Criptomoeda", 
+            options=display_options, 
+            key="cripto_select",
+            format_func=lambda x: x, # Impede que o Streamlit escape o HTML
+            help="Selecione a criptomoeda para a operação."
+        )
+
+        # Recupera o símbolo real da criptomoeda selecionada
+        cripto_symbol = display_to_symbol_map.get(selected_display_name, "")
+
 
         # Campo de quantidade para garantir tratamento decimal
         quantidade = st.number_input("Quantidade", min_value=0.00000001, format="%.8f", key="quantidade_input")
@@ -520,6 +542,10 @@ def show_wallet_details():
                 value=5.00, # Valor padrão para teste, pode ser alterado
                 key="ptax_input"
             )
+            # Removendo a prévia do valor em BRL para carteiras estrangeiras
+            # valor_em_brl_preview = custo_total_input * ptax_input
+            # st.info(f"Prévia do valor em BRL: R$ {valor_em_brl_preview:,.2f}")
+            valor_em_brl_preview = custo_total_input * ptax_input # Calcular para salvar, mas não exibir
         else:
             valor_em_brl_preview = custo_total_input
 
@@ -530,7 +556,7 @@ def show_wallet_details():
         submitted_op = st.form_submit_button("Registrar Operação ✅")
 
         if submitted_op:
-            if not cripto or quantidade <= 0 or custo_total_input <= 0:
+            if not cripto_symbol or quantidade <= 0 or custo_total_input <= 0:
                 st.error("Por favor, preencha todos os campos da operação corretamente.")
             elif is_foreign_wallet and ptax_input <= 0:
                 st.error("Por favor, informe uma taxa PTAX válida para carteiras estrangeiras.")
@@ -542,169 +568,331 @@ def show_wallet_details():
                 preco_medio_compra_na_op = float('nan')
                 lucro_prejuizo_na_op = float('nan')
 
-                custo_total_final_brl = custo_total_input * ptax_input # Já está em BRL se for nacional, ou convertido se for estrangeira
+                # O custo_total que será salvo é sempre em BRL
+                custo_total_final_brl = valor_em_brl_preview
 
-                # Lógica para cálculo de preço médio e lucro/prejuízo
-                if current_op_type == 'Compra':
-                    # Para compra, o preço médio na operação é o custo total dividido pela quantidade
-                    preco_medio_compra_na_op = custo_total_input / quantidade
-                    # lucro_prejuizo_na_op permanece NaN para compras
-                elif current_op_type == 'Venda':
-                    # Para vendas, precisamos calcular o lucro/prejuízo
-                    # Pegar as operações de compra anteriores para a mesma cripto nesta carteira
+                if current_op_type == "Compra":
+                    if quantidade > 0:
+                        preco_medio_compra_na_op = custo_total_final_brl / quantidade
+                    else:
+                        preco_medio_compra_na_op = float('nan') # Evita divisão por zero
+                elif current_op_type == "Venda":
                     compras_anteriores = df_operacoes_existentes[
                         (df_operacoes_existentes['wallet_id'] == wallet_id) &
                         (df_operacoes_existentes['cpf_usuario'] == user_cpf) &
-                        (df_operacoes_existentes['cripto'] == cripto) &
-                        (df_operacoes_existentes['tipo_operacao'] == 'Compra')
-                    ].copy()
+                        (df_operacoes_existentes['tipo_operacao'] == 'Compra') &
+                        (df_operacoes_existentes['cripto'] == cripto_symbol) & # Usar o símbolo aqui
+                        (df_operacoes_existentes['data_operacao'] <= data_hora_completa)
+                    ]
 
-                    # Calcular o total de cripto ainda em posse para esta carteira/cripto
-                    qtd_comprada_anterior = compras_anteriores['quantidade'].sum()
-                    vendas_anteriores = df_operacoes_existentes[
-                        (df_operacoes_existentes['wallet_id'] == wallet_id) &
-                        (df_operacoes_existentes['cpf_usuario'] == user_cpf) &
-                        (df_operacoes_existentes['tipo_operacao'] == 'Venda')
-                    ].copy()
-                    qtd_vendida_anterior = vendas_anteriores['quantidade'].sum()
-                    saldo_atual_cripto = qtd_comprada_anterior - qtd_vendida_anterior
+                    if not compras_anteriores.empty and compras_anteriores['quantidade'].sum() > 0:
+                        total_custo_compras = compras_anteriores['custo_total'].sum()
+                        total_quantidade_compras = compras_anteriores['quantidade'].sum()
 
-                    if quantidade > saldo_atual_cripto:
-                        st.error(f"Quantidade de venda ({quantidade:.8f}) excede o saldo disponível ({saldo_atual_cripto:.8f}) para {cripto}. Saldo deve ser maior ou igual a zero.")
-                        return # Impede o registro se a quantidade for maior que o saldo
+                        preco_medio_compra_na_op = total_custo_compras / total_quantidade_compras
 
-                    # Calcular o preço médio de compra ponderado para o saldo restante
-                    custo_total_compras = compras_anteriores['custo_total'].sum()
-                    if qtd_comprada_anterior > 0:
-                        preco_medio_ponderado_total = custo_total_compras / qtd_comprada_anterior
+                        custo_base_da_venda = quantidade * preco_medio_compra_na_op
+                        lucro_prejuizo_na_op = custo_total_final_brl - custo_base_da_venda
                     else:
-                        preco_medio_ponderado_total = 0 # Não há compras para calcular preço médio
+                        preco_medio_compra_na_op = float('nan')
+                        lucro_prejuizo_na_op = float('nan')
+                        st.warning("Não há operações de compra anteriores para calcular o preço médio para esta venda.")
 
-                    # Calcular o lucro/prejuízo
-                    # Lucro/Prejuízo = (Quantidade Vendida * Preço de Venda por unidade) - (Quantidade Vendida * Preço Médio de Compra)
-                    preco_por_unidade_venda = custo_total_input / quantidade
-                    lucro_prejuizo_na_op = (quantidade * preco_por_unidade_venda) - (quantidade * preco_medio_ponderado_total)
-
-                    preco_medio_compra_na_op = preco_medio_ponderado_total # Para registrar o preço médio na data da venda
 
                 nova_operacao = pd.DataFrame([{
-                    "id": f"op_{uuid.uuid4()}",
+                    "id": f"operacao_{uuid.uuid4()}",
                     "wallet_id": wallet_id,
                     "cpf_usuario": user_cpf,
                     "tipo_operacao": current_op_type,
-                    "cripto": cripto,
-                    "quantidade": quantidade,
-                    "custo_total": custo_total_final_brl, # Sempre em BRL
+                    "cripto": cripto_symbol, # Salva o símbolo real da criptomoeda
+                    "quantidade": float(quantidade), # Garante que a quantidade é salva como float
+                    "custo_total": custo_total_final_brl, # Salva o valor já convertido para BRL
                     "data_operacao": data_hora_completa,
                     "preco_medio_compra_na_op": preco_medio_compra_na_op,
                     "lucro_prejuizo_na_op": lucro_prejuizo_na_op,
-                    "ptax_na_op": ptax_input # Salva o PTAX usado na operação (se for estrangeira)
+                    "ptax_na_op": ptax_input # Salva a PTAX utilizada
                 }])
+
                 save_operacoes(pd.concat([df_operacoes_existentes, nova_operacao], ignore_index=True))
                 st.success("Operação registrada com sucesso!")
                 st.rerun()
 
     st.markdown("---")
-    st.markdown("#### Histórico de Operações")
-    df_operacoes_historico = load_operacoes()
-    wallet_ops_historico = df_operacoes_historico[
-        (df_operacoes_historico['wallet_id'] == wallet_id) &
-        (df_operacoes_historico['cpf_usuario'] == user_cpf)
-    ].sort_values(by='data_operacao', ascending=False).copy()
+    st.markdown("#### Histórico de Operações Desta Carteira")
 
-    if not wallet_ops_historico.empty:
-        # Renomear colunas para exibição amigável
-        display_df = wallet_ops_historico.rename(columns={
-            "tipo_operacao": "Tipo",
-            "cripto": "Cripto",
-            "quantidade": "Quantidade",
-            "custo_total": "Custo/Valor Total (BRL)",
-            "data_operacao": "Data da Operação",
-            "preco_medio_compra_na_op": "Preço Médio Compra na Op.",
-            "lucro_prejuizo_na_op": "Lucro/Prejuízo na Op.",
-            "ptax_na_op": "PTAX na Op."
-        })
+    op_confirm_placeholder = st.empty()
+    if st.session_state.get('confirm_delete_operation_id'):
+        with op_confirm_placeholder.container():
+            op_to_confirm_delete_id = st.session_state['confirm_delete_operation_id']
+            df_operacoes = load_operacoes()
 
-        # Formatar colunas numéricas para exibição
-        display_df['Quantidade'] = display_df['Quantidade'].apply(lambda x: f"{x:.8f}")
-        display_df['Custo/Valor Total (BRL)'] = display_df['Custo/Valor Total (BRL)'].apply(lambda x: f"R$ {x:,.2f}")
-
-        # Formatar colunas que podem ser NaN (e que são numéricas)
-        display_df['Preço Médio Compra na Op.'] = display_df['Preço Médio Compra na Op.'].apply(
-            lambda x: f"R$ {x:,.2f}" if pd.notna(x) else "-"
-        )
-        display_df['Lucro/Prejuízo na Op.'] = display_df['Lucro/Prejuízo na Op.'].apply(
-            lambda x: f"R$ {x:,.2f}" if pd.notna(x) else "-"
-        )
-        display_df['PTAX na Op.'] = display_df['PTAX na Op.'].apply(
-            lambda x: f"{x:,.4f}" if pd.notna(x) else "-"
-        )
-
-        # Selecionar as colunas para exibir
-        cols_to_display = ["Tipo", "Cripto", "Quantidade", "Custo/Valor Total (BRL)", "Preço Médio Compra na Op.", "Lucro/Prejuízo na Op.", "PTAX na Op.", "Data da Operação"]
-        
-        # Cria um contêiner para a tabela e o botão de exclusão
-        for idx, row in display_df.iterrows():
-            st.markdown("---") # Linha divisória para cada operação
-            col1, col2 = st.columns([0.9, 0.1])
-            with col1:
-                for col_name in cols_to_display:
-                    st.markdown(f"**{col_name}:** {row[col_name]}")
-            with col2:
-                if st.button("🗑️", key=f"delete_op_{row['id']}"):
-                    st.session_state['confirm_delete_operation_id'] = row['id']
-                    st.rerun()
-
-        operation_confirm_placeholder = st.empty()
-        if st.session_state.get('confirm_delete_operation_id'):
-            with operation_confirm_placeholder.container():
-                op_to_confirm_delete_id = st.session_state['confirm_delete_operation_id']
-                op_details = df_operacoes_historico[df_operacoes_historico['id'] == op_to_confirm_delete_id].iloc[0]
+            if op_to_confirm_delete_id in df_operacoes['id'].values:
+                op_details = df_operacoes[df_operacoes['id'] == op_to_confirm_delete_id].iloc[0]
+                op_info_display = (f"{op_details['tipo_operacao']} de {op_details['quantidade']:.8f} "
+                                f"{op_details['cripto']} (R$ {op_details['custo_total']:.2f}) em "
+                                f"{op_details['data_operacao'].strftime('%d/%m/%Y %H:%M')}")
 
                 st.markdown(f"""
-                <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-top:20px;">
+                <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-bottom:20px;">
                     <h4 style="color:#ff0000; margin-top:0;'>⚠️ Confirmar Exclusão de Operação</h4>
-                    <p>Tem certeza que deseja excluir esta operação?</p>
-                    <p>
-                        **Tipo:** {op_details['tipo_operacao']} <br>
-                        **Cripto:** {op_details['cripto']} <br>
-                        **Quantidade:** {op_details['quantidade']:.8f} <br>
-                        **Custo/Valor Total:** R$ {op_details['custo_total']:.2f} <br>
-                        **Data:** {op_details['data_operacao'].strftime('%Y-%m-%d %H:%M:%S')}
-                    </p>
+                    <p>Tem certeza que deseja excluir a operação:<br> <strong>"{op_info_display}"</strong>?</p>
                 </div>
                 """, unsafe_allow_html=True)
 
                 col_confirm_op, col_cancel_op = st.columns([0.2, 0.8])
                 with col_confirm_op:
                     if st.button("Sim, Excluir", key="confirm_op_delete_btn_modal"):
-                        df_operacoes_updated = df_operacoes_historico[df_operacoes_historico['id'] != op_to_confirm_delete_id]
-                        save_operacoes(df_operacoes_updated)
+                        df_ops_after_delete = df_operacoes[df_operacoes['id'] != op_to_confirm_delete_id]
+                        save_operacoes(df_ops_after_delete)
                         st.success("Operação excluída com sucesso!")
                         st.session_state['confirm_delete_operation_id'] = None
-                        operation_confirm_placeholder.empty()
+                        op_confirm_placeholder.empty()
                         st.rerun()
                 with col_cancel_op:
                     if st.button("Cancelar", key="cancel_op_delete_btn_modal"):
                         st.session_state['confirm_delete_operation_id'] = None
-                        operation_confirm_placeholder.empty()
+                        op_confirm_placeholder.empty()
                         st.rerun()
-        else:
-            operation_confirm_placeholder.empty()
-
+            else:
+                st.session_state['confirm_delete_operation_id'] = None
+                op_confirm_placeholder.empty()
+                st.warning("A operação que você tentou excluir não foi encontrada.")
+                st.rerun()
     else:
-        st.info("Nenhuma operação registrada para esta carteira ainda.")
+        op_confirm_placeholder.empty()
 
+    df_operacoes = load_operacoes()
+    wallet_operations_all = df_operacoes[
+        (df_operacoes['wallet_id'] == wallet_id) &
+        (df_operacoes['cpf_usuario'] == user_cpf)
+    ].copy()
+
+    wallet_origin_map = df_carteiras.set_index('id')['nacional'].to_dict()
+    wallet_operations_all['origem_carteira'] = wallet_operations_all['wallet_id'].map(wallet_origin_map)
+
+    # Adicionar coluna 'custo_total_usdt' para carteiras estrangeiras
+    wallet_operations_all['custo_total_usdt'] = float('nan')
+    if is_foreign_wallet:
+        # Calcular o valor em USDT para cada operação se for carteira estrangeira
+        # custo_total é em BRL, ptax_na_op é BRL/USDT
+        wallet_operations_all['custo_total_usdt'] = wallet_operations_all.apply(
+            lambda row: row['custo_total'] / row['ptax_na_op'] if pd.notna(row['ptax_na_op']) and row['ptax_na_op'] != 0 else float('nan'),
+            axis=1
+        )
+
+
+    st.markdown("##### Filtros")
+    col_filter1, col_filter2, col_filter3 = st.columns(3)
+
+    with col_filter1:
+        all_types = ['Compra', 'Venda']
+        filter_type = st.multiselect("Tipo", all_types, key="filter_op_type")
+
+    with col_filter2:
+        # Usar a lista completa de criptos para o filtro, se disponível
+        full_crypto_data_for_filter = load_cryptocurrencies_from_file()
+        # Extrair apenas os display_name para o multiselect
+        all_cryptos_display_names = [crypto['display_name'] for crypto in full_crypto_data_for_filter]
+
+        # Mapear display_name de volta para symbol para o filtro real
+        filter_display_to_symbol_map = {crypto['display_name']: crypto['symbol'] for crypto in full_crypto_data_for_filter}
+
+        filter_crypto_display = st.multiselect("Cripto", all_cryptos_display_names, key="filter_op_crypto")
+        # Converter os display names selecionados de volta para símbolos para filtrar o DataFrame
+        filter_crypto_symbols = [filter_display_to_symbol_map[d_name] for d_name in filter_crypto_display]
+
+
+    with col_filter3:
+        filter_date_range = st.date_input("Data", value=[], key="filter_op_date_range")
+
+    filtered_operations = wallet_operations_all.copy()
+
+    if filter_type:
+        filtered_operations = filtered_operations[filtered_operations['tipo_operacao'].isin(filter_type)]
+    if filter_crypto_symbols: # Usar os símbolos para filtrar
+        filtered_operations = filtered_operations[filtered_operations['cripto'].isin(filter_crypto_symbols)]
+    if filter_date_range and len(filter_date_range) == 2:
+        start_date, end_date = filter_date_range
+        filtered_operations = filtered_operations[
+            (filtered_operations['data_operacao'].dt.date >= start_date) &
+            (filtered_operations['data_operacao'].dt.date <= end_date)
+        ]
+    elif filter_date_range and len(filter_date_range) == 1:
+        single_date = filter_date_range[0]
+        filtered_operations = filtered_operations[filtered_operations['data_operacao'].dt.date == single_date]
+
+    if not filtered_operations.empty:
+        # Mapear símbolos para display_name (com imagem) para exibição na tabela
+        symbol_to_display_name_map = {crypto['symbol']: f"<img src='{crypto['image']}' width='20' height='20' style='vertical-align:middle; margin-right:5px;'> {crypto['display_name']}" for crypto in cryptocurrencies_data}
+        filtered_operations['cripto_display'] = filtered_operations['cripto'].map(symbol_to_display_name_map)
+
+
+        # Definindo as colunas e seus respectivos ratios
+        col_names = [
+            "Tipo", "Cripto", "Qtd.", "PTAX",
+            "Valor Total (USDT)", "Valor Total (BRL)", "P. Médio Compra",
+            "P. Médio Venda", "Lucro/Prejuízo", "Data/Hora", "Origem", "Ações"
+        ]
+        # Ajustando os ratios das colunas para dar mais espaço à 'Ações'
+        # Exemplo de ajuste: [0.06, 0.06, 0.09, 0.07, 0.11, 0.11, 0.11, 0.11, 0.11, 0.11, 0.07, 0.08]
+        # (Soma total deve ser 1.0 ou próximo)
+        cols_ratio = [0.06, 0.09, 0.09, 0.07, 0.11, 0.11, 0.11, 0.11, 0.11, 0.11, 0.07, 0.07] # Ajustei para 0.07 para 'Ações' e rebalanceei
+
+        cols = st.columns(cols_ratio)
+        for i, col_name in enumerate(col_names):
+            with cols[i]:
+                st.markdown(f"**{col_name}**")
+        st.markdown("---")
+
+        sorted_operations = filtered_operations.sort_values(by='data_operacao', ascending=False)
+
+        for idx, op_row in sorted_operations.iterrows():
+            cols = st.columns(cols_ratio)
+            with cols[0]:
+                st.write(op_row['tipo_operacao'])
+            with cols[1]:
+                # Exibe a cripto com a imagem
+                st.markdown(op_row['cripto_display'], unsafe_allow_html=True)
+            with cols[2]:
+                st.write(f"{op_row['quantidade']:.8f}") # Garante 8 casas decimais na exibição
+            with cols[3]: # PTAX
+                if pd.notna(op_row['ptax_na_op']):
+                    st.write(f"{op_row['ptax_na_op']:.4f}")
+                else:
+                    st.write("-")
+            with cols[4]: # Valor Total (USDT)
+                if is_foreign_wallet and pd.notna(op_row['custo_total_usdt']):
+                    st.write(f'USDT {op_row["custo_total_usdt"]:.2f}')
+                else:
+                    st.write("-")
+            with cols[5]: # Valor Total (BRL)
+                st.write(f"R$ {op_row['custo_total']:.2f}") # Custo total já está em BRL
+            with cols[6]:
+                if op_row['tipo_operacao'] == 'Compra' and pd.notna(op_row['preco_medio_compra_na_op']):
+                    st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}") # LINHA CORRIGIDA
+                elif op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['preco_medio_compra_na_op']):
+                    # Para vendas, o preço médio de compra na operação é o preço médio ponderado de aquisição
+                    st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}")
+                else:
+                    st.write("-")
+            with cols[7]:
+                if op_row['tipo_operacao'] == 'Venda' and op_row['quantidade'] > 0:
+                    # Preço médio de venda é o custo_total da venda dividido pela quantidade
+                    st.write(f'R$ {(op_row["custo_total"] / op_row["quantidade"]):.2f}')
+                else:
+                    st.write("-")
+            with cols[8]:
+                if op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['lucro_prejuizo_na_op']):
+                    profit_loss = op_row['lucro_prejuizo_na_op']
+                    color = "green" if profit_loss >= 0 else "red"
+                    st.markdown(f"<span style='color:{color}'>R$ {profit_loss:.2f}</span>", unsafe_allow_html=True)
+                else:
+                    st.write("-")
+            with cols[9]:
+                st.write(op_row['data_operacao'].strftime('%d/%m/%Y %H:%M'))
+            with cols[10]:
+                st.write(op_row['origem_carteira'])
+            with cols[11]: # Coluna Ações
+                if st.button("🗑️", key=f"delete_op_{op_row['id']}", help="Excluir Operação"):
+                    st.session_state['confirm_delete_operation_id'] = op_row['id']
+                    st.rerun()
+
+        st.markdown("---")
+    else:
+        st.info("Nenhuma operação registrada para esta carteira ou nenhum resultado para os filtros selecionados.")
+
+
+# --- Funções para Exibição da Tela de Autenticação (Login, Cadastro, Recuperação) ---
+def show_login():
+    """
+    Exibe as telas de autenticação: Login, Cadastro e Esqueceu a Senha.
+    """
+    df = load_users()
+
+    st.markdown("""
+    <h1 style='text-align:center;'>🟧₿ Cripto Fácil</h1>
+    <p style='text-align:center;color:gray;'>Gestor de criptoativos com relatórios para IRPF</p><hr>
+    """, unsafe_allow_html=True)
+
+    # st.session_state inicializado no início do script, não aqui.
+
+    if st.session_state["auth_page"] == "login":
+        with st.form("login_form"):
+            cpf = st.text_input("CPF")
+            senha = st.text_input("Senha", type="password")
+            submitted = st.form_submit_button("Entrar")
+        if submitted:
+            if df.empty:
+                st.error("Nenhum usuário cadastrado.")
+            elif df[(df["cpf"] == cpf) & (df["password_hash"] == hash_password(senha))].empty:
+                st.error("CPF ou senha incorretos.")
+            else:
+                st.session_state["logged_in"] = True
+                st.session_state["cpf"] = cpf
+                st.session_state["pagina_atual"] = "Portfólio" # Define a página inicial após o login
+                st.rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            st.button("Cadastrar‑se", on_click=lambda: st.session_state.update(auth_page="register"), key="btn_cadastrar_login")
+        with col2:
+            st.button("Esqueci minha senha", on_click=lambda: st.session_state.update(auth_page="forgot"), key="btn_esqueci_senha_login")
+
+    elif st.session_state["auth_page"] == "register":
+        with st.form("register_form"):
+            name = st.text_input("Nome completo")
+            cpf = st.text_input("CPF")
+            phone = st.text_input("Telefone")
+            email = st.text_input("E‑mail")
+            password = st.text_input("Senha", type="password")
+            password_confirm = st.text_input("Confirme a senha", type="password")
+            submitted = st.form_submit_button("Cadastrar")
+        if submitted:
+            if password != password_confirm:
+                st.error("Senhas não coincidem.")
+            elif df[df["cpf"] == cpf].shape[0] > 0:
+                st.error("CPF já cadastrado.")
+            else:
+                new_user = pd.DataFrame([{ "cpf": cpf, "name": name, "phone": phone, "email": email, "password_hash": hash_password(password)}])
+                save_users(pd.concat([df, new_user], ignore_index=True))
+                st.success("Cadastro realizado!")
+                st.session_state["auth_page"] = "login"
+                st.rerun()
+        st.button("Voltar", on_click=lambda: st.session_state.update(auth_page="login"), key="btn_voltar_cadastro")
+
+    elif st.session_state["auth_page"] == "forgot":
+        with st.form("forgot_form"):
+            name = st.text_input("Nome Completo")
+            cpf = st.text_input("CPF")
+            email = st.text_input("E-mail")
+            phone = st.text_input("Telefone")
+            submitted = st.form_submit_button("Verificar e Acessar")
+        if submitted:
+            # Encontrar o usuário que corresponde a todas as informações
+            matching_user = df[
+                (df["name"] == name) &
+                (df["cpf"] == cpf) &
+                (df["email"] == email) &
+                (df["phone"] == phone)
+            ]
+            if not matching_user.empty:
+                st.success("Informações verificadas! Você pode agora acessar sua conta.")
+                st.session_state["logged_in"] = True
+                st.session_state["cpf"] = cpf # Usar o CPF encontrado para o login
+                st.session_state["pagina_atual"] = "Portfólio" # Redireciona para o Portfólio após recuperação
+                st.rerun()
+            else:
+                st.error("Dados informados não correspondem a nenhum usuário cadastrado.")
+        st.button("Voltar", on_click=lambda: st.session_state.update(auth_page="login"), key="btn_voltar_esqueci")
 
 # --- Lógica Principal de Execução da Aplicação ---
 # Inicialização do session_state de forma robusta
 # Certifica-se de que st.session_state seja inicializado apenas uma vez
 if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
+    st.session_state["logged_in"] = False # Alterado de False para True, conforme sua instrução
 if "pagina_atual" not in st.session_state:
     st.session_state["pagina_atual"] = "Portfólio"
 if "auth_page" not in st.session_state:
-    st.session_state["auth_page"] = "login"
+    st.session_state["auth_page"] = "login" # Garante que a página de auth padrão seja 'login'
 
 if 'accessed_wallet_id' not in st.session_state:
     st.session_state['accessed_wallet_id'] = None
@@ -714,108 +902,10 @@ if 'confirm_delete_wallet_id' not in st.session_state:
 if 'confirm_delete_operation_id' not in st.session_state:
     st.session_state['confirm_delete_operation_id'] = None
 
-# A lógica de autenticação e navegação
+# A lógica de persistência de login é a maneira como você inicializa 'logged_in' e 'cpf'
+# Se 'logged_in' já é True na sessão (o que acontece em uma atualização se não for resetado explicitamente),
+# então o usuário permanece logado.
 if st.session_state["logged_in"]:
     show_dashboard()
 else:
-    # --- Páginas de Autenticação ---
-    if st.session_state["auth_page"] == "login":
-        st.title("Bem-vindo ao Cripto Fácil! 🟧₿")
-        st.subheader("Faça Login")
-        with st.form("form_login"):
-            login_cpf = st.text_input("CPF")
-            login_password = st.text_input("Senha", type="password")
-            login_button = st.form_submit_button("Entrar")
-            if login_button:
-                users_df = load_users()
-                user_match = users_df[users_df['cpf'] == login_cpf]
-                if not user_match.empty and user_match.iloc[0]['password_hash'] == hash_password(login_password):
-                    st.session_state["logged_in"] = True
-                    st.session_state["cpf"] = login_cpf
-                    st.success("Login bem-sucedido!")
-                    st.rerun()
-                else:
-                    st.error("CPF ou senha incorretos.")
-        st.markdown("---")
-        st.button("Criar Conta", on_click=lambda: st.session_state.update(auth_page="register"))
-        st.button("Esqueci Minha Senha", on_click=lambda: st.session_state.update(auth_page="forgot_password"))
-
-    elif st.session_state["auth_page"] == "register":
-        st.title("Crie sua conta no Cripto Fácil 📝")
-        with st.form("form_register"):
-            reg_name = st.text_input("Nome Completo")
-            reg_cpf = st.text_input("CPF")
-            reg_phone = st.text_input("Telefone")
-            reg_email = st.text_input("Email")
-            reg_password = st.text_input("Senha", type="password")
-            reg_confirm_password = st.text_input("Confirme a Senha", type="password")
-            register_button = st.form_submit_button("Registrar")
-            if register_button:
-                users_df = load_users()
-                if reg_cpf in users_df['cpf'].values:
-                    st.error("CPF já cadastrado.")
-                elif reg_password != reg_confirm_password:
-                    st.error("As senhas não coincidem.")
-                else:
-                    new_user = pd.DataFrame([{
-                        "cpf": reg_cpf,
-                        "name": reg_name,
-                        "phone": reg_phone,
-                        "email": reg_email,
-                        "password_hash": hash_password(reg_password)
-                    }])
-                    save_users(pd.concat([users_df, new_user], ignore_index=True))
-                    st.success("Conta criada com sucesso! Faça login.")
-                    st.session_state["auth_page"] = "login"
-                    st.rerun()
-        st.button("Voltar", on_click=lambda: st.session_state.update(auth_page="login"))
-
-    elif st.session_state["auth_page"] == "forgot_password":
-        st.title("Recuperar Senha 🔑")
-        with st.form("form_forgot_password"):
-            forgot_cpf = st.text_input("Seu CPF")
-            forgot_email = st.text_input("Seu Email Cadastrado")
-            send_code_button = st.form_submit_button("Enviar Código de Recuperação")
-            if send_code_button:
-                users_df = load_users()
-                user_match = users_df[(users_df['cpf'] == forgot_cpf) & (users_df['email'] == forgot_email)]
-                if not user_match.empty:
-                    send_recovery_code(forgot_email)
-                    st.session_state["auth_page"] = "verify_code"
-                    st.session_state["temp_cpf"] = forgot_cpf # Armazena o CPF temporariamente
-                    st.rerun()
-                else:
-                    st.error("CPF ou Email não encontrados.")
-        st.button("Voltar", on_click=lambda: st.session_state.update(auth_page="login"))
-
-    elif st.session_state["auth_page"] == "verify_code":
-        st.title("Verificar Código e Redefinir Senha")
-        st.write(f"Um código foi enviado para {st.session_state.get('reset_email', 'seu e-mail')}.")
-        with st.form("form_verify_code"):
-            input_code = st.text_input("Código de Recuperação")
-            new_password = st.text_input("Nova Senha", type="password")
-            confirm_new_password = st.text_input("Confirme a Nova Senha", type="password")
-            verify_button = st.form_submit_button("Redefinir Senha")
-            if verify_button:
-                if input_code == st.session_state.get("recovery_code"):
-                    if new_password == confirm_new_password:
-                        users_df = load_users()
-                        cpf_to_update = st.session_state.get("temp_cpf")
-                        if cpf_to_update:
-                            users_df.loc[users_df['cpf'] == cpf_to_update, 'password_hash'] = hash_password(new_password)
-                            save_users(users_df)
-                            st.success("Senha redefinida com sucesso! Faça login com sua nova senha.")
-                            # Limpa os estados de recuperação
-                            del st.session_state["recovery_code"]
-                            del st.session_state["reset_email"]
-                            del st.session_state["temp_cpf"]
-                            st.session_state["auth_page"] = "login"
-                            st.session_state["pagina_atual"] = "Portfólio" # Redireciona para o Portfólio após recuperação
-                            st.rerun()
-                        else:
-                            st.error("Erro: CPF temporário não encontrado na sessão. Por favor, tente novamente a recuperação de senha.")
-                    else:
-                        st.error("As novas senhas não coincidem.")
-                else:
-                    st.error("Código de recuperação incorreto.")
-        st.button("Voltar", on_click=lambda: st.session_state.update(auth_page="forgot_password"))
+    show_login()
