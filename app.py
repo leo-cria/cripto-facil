@@ -740,7 +740,7 @@ def show_wallet_details():
                     st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}")
                 elif op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['preco_medio_compra_na_op']):
                     # Para vendas, o preço médio de compra na operação é o preço médio ponderado de aquisição
-                    st.write(f'R$ {op_row["preco_medio_compra_na_op']:.2f}')
+                    st.write(f"R$ {op_row['alguma_outra_chave_aqui']:.2f}")
                 else:
                     st.write("-")
             with cols[7]:
