@@ -35,16 +35,6 @@ def hash_password(password):
     """Gera um hash SHA256 da senha fornecida para armazenamento seguro."""
     return hashlib.sha256(password.encode()).hexdigest()
 
-def send_recovery_code(email):
-    """
-    Simula o envio de um código de recuperação para o e-mail do usuário.
-    Armazena o código e o e-mail na sessão para verificação posterior.
-    """
-    code = "".join(random.choices(string.digits, k=6))
-    st.session_state["recovery_code"] = code
-    st.session_state["reset_email"] = email
-    st.success(f"Código enviado para {email} 🔐 (simulado: **{code}**)")
-
 def load_carteiras():
     """
     Carrega os dados das carteiras do arquivo CSV.
@@ -109,13 +99,67 @@ def save_operacoes(df):
     df.to_csv(OPERACOES_FILE, index=False)
 
 # --- Simulação de API de Criptomoedas ---
+#@st.cache_data
+#def fetch_cryptocurrencies_from_api():
+    #"""
+    #Simula a chamada a uma API externa (e.g., CoinMarketCap) para obter uma lista de criptomoedas.
+    #"""
+    #time.sleep(0.5)
+    #return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "SHIB", "DOT", "MATIC"]
+
+# URL da sua API local (onde o Flask está rodando)
+LOCAL_API_URL = "http://127.0.0.1:5000/cryptocurrencies"
+
 @st.cache_data
 def fetch_cryptocurrencies_from_api():
     """
-    Simula a chamada a uma API externa (e.g., CoinMarketCap) para obter uma lista de criptomoedas.
+    Busca a lista de criptomoedas da sua API local.
     """
-    time.sleep(0.5)
-    return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB", "DOGE", "SHIB", "DOT", "MATIC"]
+    try:
+        # Faz a requisição para a sua API Flask local
+        response = requests.get(LOCAL_API_URL)
+        response.raise_for_status()  # Lança um erro para status de resposta ruins (4xx ou 5xx)
+        cryptos_data = response.json()
+
+        # Extrai apenas os símbolos ou IDs, dependendo do que você precisa
+        # O CoinGecko retorna 'id', 'symbol', 'name'
+        # Vamos pegar os símbolos para manter a semelhança com seu exemplo original.
+        # Você pode ajustar isso para 'id' ou 'name' se preferir.
+        symbols = [crypto.get('symbol', '').upper() for crypto in cryptos_data if crypto.get('symbol')]
+
+        # Se a lista de símbolos estiver vazia ou com problemas, você pode ter um fallback
+        if not symbols:
+            st.warning("Não foi possível obter criptomoedas da API local. Retornando uma lista padrão.")
+            return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB"] # Lista de fallback
+
+        return symbols
+
+    except requests.exceptions.ConnectionError:
+        st.error(f"Erro de conexão: Verifique se sua API local está rodando em {LOCAL_API_URL}.")
+        return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB"] # Fallback em caso de erro de conexão
+    except requests.exceptions.RequestException as e:
+        st.error(f"Erro ao buscar dados da API local: {e}")
+        return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB"] # Fallback em caso de outros erros de requisição
+    except Exception as e:
+        st.error(f"Ocorreu um erro inesperado: {e}")
+        return ["BTC", "ETH", "SOL", "ADA", "XRP", "BNB"] # Fallback para erros genéricos
+
+# Exemplo de como usar no seu aplicativo Streamlit:
+if __name__ == '__main__':
+    st.title("Seletor de Criptomoedas com API Local")
+
+    # Chama a função para obter as criptomoedas
+    available_cryptos = fetch_cryptocurrencies_from_api()
+
+    # Cria o seletor
+    selected_crypto = st.selectbox(
+        "Selecione uma criptomoeda:",
+        available_cryptos
+    )
+
+    st.write(f"Você selecionou: **{selected_crypto}**")
+
+    st.info("Para que isso funcione, certifique-se de que sua API Flask local esteja rodando (o arquivo `app.py` que discutimos anteriormente).")
 
 # --- Funções para Exibição do Dashboard ---
 def show_dashboard():
