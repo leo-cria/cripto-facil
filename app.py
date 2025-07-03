@@ -509,20 +509,21 @@ def show_wallet_details():
         display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data}
 
         # O selectbox exibirá apenas as strings de display_name
-        # Adiciona um callback on_change para atualizar o session_state com o objeto selecionado
+        # Removido o on_change para evitar StreamlitInvalidFormCallbackError
         selected_display_name = st.selectbox(
             "Criptomoeda", 
             options=display_options, 
             key="cripto_select",
-            help="Selecione a criptomoeda para a operação.",
-            on_change=lambda: st.session_state.update(
-                current_selected_crypto_obj=display_name_to_crypto_map.get(st.session_state.cripto_select)
-            )
+            help="Selecione a criptomoeda para a operação."
         )
 
-        # Inicializa o session_state para a cripto selecionada se ainda não estiver definido
-        if 'current_selected_crypto_obj' not in st.session_state:
+        # Atualiza o session_state com o objeto selecionado APÓS a seleção do selectbox
+        # Isso garante que a re-execução do script pegue o valor correto.
+        if selected_display_name: # Garante que algo foi selecionado
             st.session_state['current_selected_crypto_obj'] = display_name_to_crypto_map.get(selected_display_name)
+        else:
+            st.session_state['current_selected_crypto_obj'] = None
+
 
         # Recupera o objeto completo da criptomoeda selecionada do session_state para exibição
         selected_crypto_for_display = st.session_state.get('current_selected_crypto_obj')
@@ -538,7 +539,9 @@ def show_wallet_details():
         else:
             # Se nada for selecionado ou ocorrer um problema, defina um símbolo vazio
             cripto_symbol = "" 
-            st.warning("Por favor, selecione uma criptomoeda válida.")
+            # Removido o st.warning aqui para evitar que apareça sempre que a página carrega
+            # A validação final será feita no submit do formulário
+            st.markdown("<p style='color:orange;'>Selecione uma criptomoeda para ver os detalhes.</p>", unsafe_allow_html=True)
 
 
         # Campo de quantidade para garantir tratamento decimal
@@ -763,6 +766,7 @@ def show_wallet_details():
             "P. Médio Venda", "Lucro/Prejuízo", "Data/Hora", "Origem", "Ações"
         ]
         # Ajustando os ratios das colunas para caber na tela
+        # Total deve somar 1.0 ou próximo.
         cols_ratio = [0.05, 0.04, 0.08, 0.08, 0.06, 0.10, 0.10, 0.10, 0.10, 0.10, 0.07, 0.06, 0.06] 
 
         cols = st.columns(cols_ratio)
