@@ -842,5 +842,5 @@ if "auth_page" not in st.session_state:
 
 if st.session_state["logged_in"]:
     show_dashboard()
-    else:
+else:
     show_login()
