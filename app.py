@@ -8,6 +8,9 @@ import uuid
 from datetime import datetime
 import time
 
+# No início do script (antes de qualquer lógica de inicialização de session_state)
+st.write(f"Estado de logged_in no início da execução: {st.session_state.get('logged_in', 'Não Definido')}")
+
 # Configuração inicial da página Streamlit
 st.set_page_config(page_title="Cripto Fácil", page_icon="🟧₿", layout="wide")
 
@@ -835,7 +838,7 @@ def show_login():
 # Inicialização do session_state de forma robusta
 # Certifica-se de que st.session_state seja inicializado apenas uma vez
 if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = True
+    st.session_state["logged_in"] = False
 if "pagina_atual" not in st.session_state:
     st.session_state["pagina_atual"] = "Portfólio"
 if "auth_page" not in st.session_state:
