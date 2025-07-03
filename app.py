@@ -97,9 +97,9 @@ def load_operacoes():
 
         df['data_operacao'] = pd.to_datetime(df['data_operacao'], errors='coerce')
         
-        # Garante que a coluna 'cripto' seja do tipo string para evitar 'nan' literal
+        # Garante que a coluna 'cripto' seja do tipo string e substitui 'nan' literal
         if 'cripto' in df.columns:
-            df['cripto'] = df['cripto'].astype(str).replace('nan', '') # Substitui 'nan' string por vazio
+            df['cripto'] = df['cripto'].astype(str).replace('nan', '') 
         
         return df
     return pd.DataFrame(columns=[
@@ -195,7 +195,7 @@ def show_dashboard():
                 atual = st.text_input("Senha atual", type="password")
                 nova = st.text_input("Nova senha", type="password")
                 confirmar = st.text_input("Confirme a senha", type="password")
-                ok = st.form_submit_button("Alterar senha �")
+                ok = st.form_submit_button("Alterar senha 🔑")
                 if ok:
                     if hash_password(atual) != usuario['password_hash']:
                         st.error("Senha atual incorreta.")
@@ -389,7 +389,6 @@ def show_wallet_details():
 
         # --- Calcular detalhes do portfólio atual por cripto ---
         for cripto_simbolo in wallet_ops_for_portfolio['cripto'].unique():
-            # CORREÇÃO AQUI: Usar wallet_ops_for_portfolio no lado direito
             ops_cripto = wallet_ops_for_portfolio[wallet_ops_for_portfolio['cripto'] == cripto_simbolo]
 
             qtd_comprada = ops_cripto[ops_cripto['tipo_operacao'] == 'Compra']['quantidade'].sum()
@@ -510,25 +509,32 @@ def show_wallet_details():
         display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data}
 
         # O selectbox exibirá apenas as strings de display_name
+        # Adiciona um callback on_change para atualizar o session_state com o objeto selecionado
         selected_display_name = st.selectbox(
             "Criptomoeda", 
             options=display_options, 
             key="cripto_select",
-            help="Selecione a criptomoeda para a operação."
+            help="Selecione a criptomoeda para a operação.",
+            on_change=lambda: st.session_state.update(
+                current_selected_crypto_obj=display_name_to_crypto_map.get(st.session_state.cripto_select)
+            )
         )
 
-        # Recupera o objeto completo da criptomoeda selecionada
-        selected_crypto = display_name_to_crypto_map.get(selected_display_name)
+        # Inicializa o session_state para a cripto selecionada se ainda não estiver definido
+        if 'current_selected_crypto_obj' not in st.session_state:
+            st.session_state['current_selected_crypto_obj'] = display_name_to_crypto_map.get(selected_display_name)
+
+        # Recupera o objeto completo da criptomoeda selecionada do session_state para exibição
+        selected_crypto_for_display = st.session_state.get('current_selected_crypto_obj')
 
         # Exibe a logo e o nome completo da criptomoeda selecionada abaixo do selectbox
-        # Garante que selected_crypto não é None antes de tentar acessar suas chaves
-        if selected_crypto:
+        if selected_crypto_for_display:
             st.markdown(
-                f"<img src='{selected_crypto['image']}' width='30' height='30' style='vertical-align:middle; margin-right:10px;'> "
-                f"**{selected_crypto['symbol']}** - {selected_crypto['name']}", 
+                f"<img src='{selected_crypto_for_display['image']}' width='30' height='30' style='vertical-align:middle; margin-right:10px;'> "
+                f"**{selected_crypto_for_display['symbol']}** - {selected_crypto_for_display['name']}", 
                 unsafe_allow_html=True
             )
-            cripto_symbol = selected_crypto['symbol'] # Atribui o símbolo para uso posterior
+            cripto_symbol = selected_crypto_for_display['symbol'] # Atribui o símbolo para uso posterior
         else:
             # Se nada for selecionado ou ocorrer um problema, defina um símbolo vazio
             cripto_symbol = "" 
@@ -737,23 +743,27 @@ def show_wallet_details():
         filtered_operations = filtered_operations[filtered_operations['data_operacao'].dt.date == single_date]
 
     if not filtered_operations.empty:
-        # Mapear símbolos para display_name (com imagem) para exibição na tabela
-        # Usar .get com um valor padrão para lidar com símbolos ausentes (como 'nan')
+        # Mapear símbolos para o objeto completo da criptomoeda
         symbol_to_full_crypto_info_map = {crypto['symbol']: crypto for crypto in cryptocurrencies_data}
         
-        filtered_operations['cripto_display'] = filtered_operations['cripto'].apply(
-            lambda symbol: f"<img src='{symbol_to_full_crypto_info_map[symbol]['image']}' width='20' height='20' style='vertical-align:middle; margin-right:5px;'> {symbol_to_full_crypto_info_map[symbol]['display_name']}"
-            if symbol in symbol_to_full_crypto_info_map else str(symbol) # Exibe o símbolo original se não encontrado
+        # Criar novas colunas para a logo e o texto da cripto na tabela
+        filtered_operations['crypto_image_html'] = filtered_operations['cripto'].apply(
+            lambda symbol: f"<img src='{symbol_to_full_crypto_info_map[symbol]['image']}' width='20' height='20' style='vertical-align:middle; margin-right:5px;'>"
+            if symbol and symbol in symbol_to_full_crypto_info_map and symbol_to_full_crypto_info_map[symbol].get('image') else "" 
+        )
+        filtered_operations['cripto_text_display'] = filtered_operations['cripto'].apply(
+            lambda symbol: symbol_to_full_crypto_info_map[symbol]['display_name']
+            if symbol and symbol in symbol_to_full_crypto_info_map else str(symbol)
         )
 
-        # Definindo as colunas e seus respectivos ratios
+        # Definindo as colunas e seus respectivos ratios (ajustados para a nova coluna "Logo")
         col_names = [
-            "Tipo", "Cripto", "Qtd.", "PTAX",
+            "Tipo", "Logo", "Cripto", "Qtd.", "PTAX",
             "Valor Total (USDT)", "Valor Total (BRL)", "P. Médio Compra",
             "P. Médio Venda", "Lucro/Prejuízo", "Data/Hora", "Origem", "Ações"
         ]
-        # Ajustando os ratios das colunas para dar mais espaço à 'Ações'
-        cols_ratio = [0.06, 0.09, 0.09, 0.07, 0.11, 0.11, 0.11, 0.11, 0.11, 0.11, 0.07, 0.07] 
+        # Ajustando os ratios das colunas para caber na tela
+        cols_ratio = [0.05, 0.04, 0.08, 0.08, 0.06, 0.10, 0.10, 0.10, 0.10, 0.10, 0.07, 0.06, 0.06] 
 
         cols = st.columns(cols_ratio)
         for i, col_name in enumerate(col_names):
@@ -767,49 +777,48 @@ def show_wallet_details():
             cols = st.columns(cols_ratio)
             with cols[0]:
                 st.write(op_row['tipo_operacao'])
-            with cols[1]:
-                # Exibe a cripto com a imagem ou o símbolo original
-                st.markdown(op_row['cripto_display'], unsafe_allow_html=True)
-            with cols[2]:
-                st.write(f"{op_row['quantidade']:.8f}") # Garante 8 casas decimais na exibição
-            with cols[3]: # PTAX
+            with cols[1]: # Nova coluna para a Logo
+                st.markdown(op_row['crypto_image_html'], unsafe_allow_html=True)
+            with cols[2]: # Coluna Cripto (apenas o texto)
+                st.write(op_row['cripto_text_display'])
+            with cols[3]:
+                st.write(f"{op_row['quantidade']:.8f}") 
+            with cols[4]: # PTAX
                 if pd.notna(op_row['ptax_na_op']):
                     st.write(f"{op_row['ptax_na_op']:.4f}")
                 else:
                     st.write("-")
-            with cols[4]: # Valor Total (USDT)
+            with cols[5]: # Valor Total (USDT)
                 if is_foreign_wallet and pd.notna(op_row['custo_total_usdt']):
                     st.write(f'USDT {op_row["custo_total_usdt"]:.2f}')
                 else:
                     st.write("-")
-            with cols[5]: # Valor Total (BRL)
-                st.write(f"R$ {op_row['custo_total']:.2f}") # Custo total já está em BRL
-            with cols[6]:
+            with cols[6]: # Valor Total (BRL)
+                st.write(f"R$ {op_row['custo_total']:.2f}") 
+            with cols[7]:
                 if op_row['tipo_operacao'] == 'Compra' and pd.notna(op_row['preco_medio_compra_na_op']):
                     st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}") 
                 elif op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['preco_medio_compra_na_op']):
-                    # Para vendas, o preço médio de compra na operação é o preço médio ponderado de aquisição
                     st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}")
                 else:
                     st.write("-")
-            with cols[7]:
+            with cols[8]:
                 if op_row['tipo_operacao'] == 'Venda' and op_row['quantidade'] > 0:
-                    # Preço médio de venda é o custo_total da venda dividido pela quantidade
                     st.write(f'R$ {(op_row["custo_total"] / op_row["quantidade"]):.2f}')
                 else:
                     st.write("-")
-            with cols[8]:
+            with cols[9]:
                 if op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['lucro_prejuizo_na_op']):
                     profit_loss = op_row['lucro_prejuizo_na_op']
                     color = "green" if profit_loss >= 0 else "red"
                     st.markdown(f"<span style='color:{color}'>R$ {profit_loss:.2f}</span>", unsafe_allow_html=True)
                 else:
                     st.write("-")
-            with cols[9]:
-                st.write(op_row['data_operacao'].strftime('%d/%m/%Y %H:%M'))
             with cols[10]:
+                st.write(op_row['data_operacao'].strftime('%d/%m/%Y %H:%M'))
+            with cols[11]:
                 st.write(op_row['origem_carteira'])
-            with cols[11]: # Coluna Ações
+            with cols[12]: # Coluna Ações
                 if st.button("🗑️", key=f"delete_op_{op_row['id']}", help="Excluir Operação"):
                     st.session_state['confirm_delete_operation_id'] = op_row['id']
                     st.rerun()
