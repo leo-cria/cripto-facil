@@ -500,7 +500,7 @@ def show_wallet_details():
             # valor_em_brl_preview = custo_total_input * ptax_input
             # st.info(f"Prévia do valor em BRL: R$ {valor_em_brl_preview:,.2f}")
             valor_em_brl_preview = custo_total_input * ptax_input # Calcular para salvar, mas não exibir
-            else:
+        else:
             valor_em_brl_preview = custo_total_input
 
         data_operacao = st.date_input("Data da Operação", value="today", key="data_op_input")
