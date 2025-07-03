@@ -35,16 +35,6 @@ def hash_password(password):
     """Gera um hash SHA256 da senha fornecida para armazenamento seguro."""
     return hashlib.sha256(password.encode()).hexdigest()
 
-def send_recovery_code(email):
-    """
-    Simula o envio de um código de recuperação para o e-mail do usuário.
-    Armazena o código e o e-mail na sessão para verificação posterior.
-    """
-    code = "".join(random.choices(string.digits, k=6))
-    st.session_state["recovery_code"] = code
-    st.session_state["reset_email"] = email
-    st.success(f"Código enviado para {email} 🔐 (simulado: **{code}**)")
-
 def load_carteiras():
     """
     Carrega os dados das carteiras do arquivo CSV.
@@ -408,7 +398,7 @@ def show_wallet_details():
     # Criar DataFrame para o portfólio detalhado
     portfolio_df = pd.DataFrame.from_dict(portfolio_detail, orient='index').reset_index()
     if not portfolio_df.empty:
-        portfolio_df.columns = ['Cripto', 'Quantidade', 'Custo Total', 'Custo Médio', 'Lucro Realizado']
+        portfolio_df.columns = ['Cripto', 'Quantidade', 'Custo Total', 'Preço Médio', 'Lucro Realizado']
         portfolio_df = portfolio_df[portfolio_df['Quantidade'] > 0] # Filtrar só as que tem saldo > 0
 
         # Calcular o Custo Total da Carteira com base no portfolio_df filtrado
@@ -430,7 +420,7 @@ def show_wallet_details():
         # Ordenar por 'Custo Total' em ordem decrescente
         portfolio_df = portfolio_df.sort_values(by='Custo Total', ascending=False)
 
-        col_names_portfolio = ["Cripto", "Quantidade", "Custo Total", "Custo Médio", "Lucro Realizado"]
+        col_names_portfolio = ["Cripto", "Quantidade", "Custo Total", "Preço Médio", "Lucro Realizado"]
         cols_ratio_portfolio = [0.15, 0.20, 0.20, 0.20, 0.25]
 
         cols_portfolio = st.columns(cols_ratio_portfolio)
@@ -494,7 +484,7 @@ def show_wallet_details():
 
         custo_total_input = st.number_input(valor_label_base, min_value=0.01, format="%.2f", key="custo_total_input")
 
-        ptax_input = 1.0 # Default para carteiras nacionais, ou se não for informada
+        ptax_input = 0.0 # Default para carteiras nacionais, ou se não for informada
         valor_em_brl_preview = 0.0
 
         if is_foreign_wallet:
@@ -502,12 +492,12 @@ def show_wallet_details():
                 "Taxa PTAX (BRL por USDT)",
                 min_value=0.01,
                 format="%.4f",
-                value=5.00, # Valor padrão para teste, pode ser alterado
+                value=0.00, # Valor padrão para teste, pode ser alterado
                 key="ptax_input"
             )
-            # Removendo a prévia do valor em BRL para carteiras estrangeiras
-            # valor_em_brl_preview = custo_total_input * ptax_input
-            # st.info(f"Prévia do valor em BRL: R$ {valor_em_brl_preview:,.2f}")
+            # Valor da previa em BRL para carteiras estrangeiras
+            valor_em_brl_preview = custo_total_input * ptax_input
+            st.info(f"Prévia do valor em BRL: R$ {valor_em_brl_preview:,.2f}")
             valor_em_brl_preview = custo_total_input * ptax_input # Calcular para salvar, mas não exibir
         else:
             valor_em_brl_preview = custo_total_input
@@ -838,8 +828,6 @@ if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "pagina_atual" not in st.session_state:
     st.session_state["pagina_atual"] = "Portfólio"
-if "auth_page" not in st.session_state:
-    st.session_state["auth_page"] = "login" # Garante que a página de auth padrão seja 'login'
 
 if 'accessed_wallet_id' not in st.session_state:
     st.session_state['accessed_wallet_id'] = None
@@ -851,3 +839,5 @@ if 'confirm_delete_operation_id' not in st.session_state:
 
 if st.session_state["logged_in"]:
     show_dashboard()
+    else:
+    show_login()
