@@ -835,7 +835,7 @@ def show_login():
 # Inicialização do session_state de forma robusta
 # Certifica-se de que st.session_state seja inicializado apenas uma vez
 if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False # Alterado de False para True, conforme sua instrução
+    st.session_state["logged_in"] = False
 if "pagina_atual" not in st.session_state:
     st.session_state["pagina_atual"] = "Portfólio"
 if "auth_page" not in st.session_state:
@@ -849,10 +849,5 @@ if 'confirm_delete_wallet_id' not in st.session_state:
 if 'confirm_delete_operation_id' not in st.session_state:
     st.session_state['confirm_delete_operation_id'] = None
 
-# A lógica de persistência de login é a maneira como você inicializa 'logged_in' e 'cpf'
-# Se 'logged_in' já é True na sessão (o que acontece em uma atualização se não for resetado explicitamente),
-# então o usuário permanece logado.
 if st.session_state["logged_in"]:
     show_dashboard()
-else:
-    show_login()
