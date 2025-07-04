@@ -5,7 +5,7 @@ import os
 import random
 import string
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 import time
 import json
 
@@ -127,15 +127,35 @@ def load_cryptocurrencies_from_file():
     if os.path.exists(CRYPTOS_FILE):
         try:
             with open(CRYPTOS_FILE, "r", encoding="utf-8") as f:
-                cryptos_data = json.load(f)
-                # Retorna a lista de dicionários
-                return cryptos_data
+                data = json.load(f)
+                # A nova estrutura tem "last_updated_timestamp" e "cryptos"
+                last_updated = data.get("last_updated_timestamp")
+                cryptos = data.get("cryptos", [])
+                
+                # Converte a lista de dicionários para um DataFrame para fácil manipulação
+                # Certifica-se de que 'current_price_brl' é float
+                df_cryptos = pd.DataFrame(cryptos)
+                if 'current_price_brl' in df_cryptos.columns:
+                    df_cryptos['current_price_brl'] = pd.to_numeric(df_cryptos['current_price_brl'], errors='coerce')
+                
+                # Retorna a data de atualização e o DataFrame de criptos
+                return last_updated, df_cryptos
         except json.JSONDecodeError:
             st.error(f"Erro ao decodificar o arquivo {CRYPTOS_FILE}. Verifique o formato JSON.")
-            return []
+            return None, pd.DataFrame(columns=["symbol", "name", "image", "display_name", "current_price_brl"])
     else:
         st.warning(f"Arquivo '{CRYPTOS_FILE}' não encontrado. Execute 'gerar_cryptos_json.py' para criá-lo.")
-        return [] # Retorna uma lista vazia se o arquivo não existir
+        return None, pd.DataFrame(columns=["symbol", "name", "image", "display_name", "current_price_brl"])
+
+def get_current_crypto_price(crypto_symbol, df_cryptos_prices):
+    """
+    Retorna o preço atual de uma criptomoeda em BRL do DataFrame de preços.
+    """
+    price_row = df_cryptos_prices[df_cryptos_prices['symbol'] == crypto_symbol]
+    if not price_row.empty:
+        # Pega o primeiro preço encontrado para o símbolo
+        return price_row['current_price_brl'].iloc[0]
+    return 0.0 # Retorna 0.0 se não encontrar o preço
 
 # --- Funções para Exibição do Dashboard ---
 def show_dashboard():
@@ -176,6 +196,21 @@ def show_dashboard():
     page = st.session_state.get("pagina_atual", "Portfólio")
     # Título da página dinâmico
     st.title(pages[page])
+
+    # Carrega os dados mais recentes das criptomoedas e a data de atualização
+    last_updated_timestamp, df_cryptos_prices = load_cryptocurrencies_from_file()
+    
+    # Adiciona a data de atualização no topo
+    if last_updated_timestamp:
+        try:
+            # Converte a string ISO para objeto datetime e formata para dd/mm/aaaa
+            updated_dt = datetime.fromisoformat(last_updated_timestamp)
+            st.markdown(f"**Data do Valor Atual da Carteira:** {updated_dt.strftime('%d/%m/%Y')}")
+        except ValueError:
+            st.markdown("Não foi possível formatar a data de atualização da API.")
+    else:
+        st.markdown("Data de atualização da API não disponível.")
+
 
     if page == "Minha Conta":
         df = load_users()
@@ -381,8 +416,8 @@ def show_wallet_details():
     portfolio_detail = {}
 
     # Carrega os dados de criptomoedas para ter os preços atuais
-    cryptocurrencies_data = load_cryptocurrencies_from_file()
-    crypto_prices = {crypto['symbol'].upper(): crypto.get('current_price_brl', 0) for crypto in cryptocurrencies_data}
+    last_updated_timestamp_crypto, cryptocurrencies_data = load_cryptocurrencies_from_file()
+    crypto_prices = {crypto['symbol'].upper(): crypto.get('current_price_brl', 0) for crypto in cryptocurrencies_data.to_dict('records')}
 
 
     if not wallet_ops_for_portfolio.empty:
@@ -518,13 +553,17 @@ def show_wallet_details():
     )
 
     # Carrega a lista de dicionários de criptomoedas
-    cryptocurrencies_data = load_cryptocurrencies_from_file()
+    # A variável cryptocurrencies_data já é um DataFrame aqui
+    # A função load_cryptocurrencies_from_file retorna (last_updated, df_cryptos)
+    # Então, cryptocurrencies_data é o df_cryptos
+    _, cryptocurrencies_data_df = load_cryptocurrencies_from_file()
     
     # Cria uma lista de strings para exibição no selectbox (apenas o display_name)
-    display_options = [crypto['display_name'] for crypto in cryptocurrencies_data]
+    display_options = cryptocurrencies_data_df['display_name'].tolist()
     
     # Mapeia o display_name para o objeto completo da criptomoeda para fácil recuperação
-    display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data}
+    # Convertendo o DataFrame para lista de dicionários para o map
+    display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data_df.to_dict('records')}
 
     # Função de callback para o selectbox
     def on_crypto_select_change():
@@ -630,7 +669,10 @@ def show_wallet_details():
         data_operacao = st.date_input(
             "Data da Operação", 
             key="data_op_input_form", # Chave específica para o widget dentro do form
-            value=st.session_state['data_op_input_value']
+            value=st.session_state['data_op_input_value'],
+            min_value=date(2000, 1, 1), # Ano mínimo
+            max_value=date(2100, 12, 31), # Ano máximo
+            format="DD/MM/YYYY" # Formato de exibição
         )
         hora_operacao = st.time_input(
             "Hora da Operação", 
@@ -786,12 +828,13 @@ def show_wallet_details():
 
     with col_filter2:
         # Usar a lista completa de criptos para o filtro, se disponível
-        full_crypto_data_for_filter = load_cryptocurrencies_from_file()
+        # cryptocurrencies_data_df já é o DataFrame de criptos
+        full_crypto_data_for_filter = cryptocurrencies_data_df
         # Extrair apenas os display_name para o multiselect
-        all_cryptos_display_names = [crypto['display_name'] for crypto in full_crypto_data_for_filter]
+        all_cryptos_display_names = full_crypto_data_for_filter['display_name'].tolist()
 
         # Mapear display_name de volta para symbol para o filtro real
-        filter_display_to_symbol_map = {crypto['display_name']: crypto['symbol'] for crypto in full_crypto_data_for_filter}
+        filter_display_to_symbol_map = {crypto['display_name']: crypto['symbol'] for crypto in full_crypto_data_for_filter.to_dict('records')}
 
         filter_crypto_display = st.multiselect("Cripto", all_cryptos_display_names, key="filter_op_crypto")
         # Converter os display names selecionados de volta para símbolos para filtrar o DataFrame
@@ -819,7 +862,8 @@ def show_wallet_details():
 
     if not filtered_operations.empty:
         # Mapear símbolos para o objeto completo da criptomoeda
-        symbol_to_full_crypto_info_map = {crypto['symbol']: crypto for crypto in cryptocurrencies_data}
+        # cryptocurrencies_data_df já é o DataFrame de criptos
+        symbol_to_full_crypto_info_map = {crypto['symbol']: crypto for crypto in cryptocurrencies_data_df.to_dict('records')}
         
         # Criar novas colunas para a logo e o texto da cripto na tabela
         filtered_operations['crypto_image_html'] = filtered_operations['cripto'].apply(
@@ -946,7 +990,7 @@ def show_login():
             phone = st.text_input("Telefone")
             email = st.text_input("E‑mail")
             password = st.text_input("Senha", type="password")
-            password_confirm = st.text_input("Confirme a senha", type="password")
+            password_confirm = st.text_input("Confirme a senha", type="password") 
             submitted = st.form_submit_button("Cadastrar")
         if submitted:
             if password != password_confirm:
