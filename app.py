@@ -389,7 +389,7 @@ def show_wallet_details():
 
         # --- Calcular detalhes do portfólio atual por cripto ---
         for cripto_simbolo in wallet_ops_for_portfolio['cripto'].unique():
-            ops_cripto = wallet_ops_for_portfolio[wallet_ops_for_portfolio['cripto'] == cripto_simbolo]
+            ops_cripto = wallet_ops_for_portfolio[ops_cripto['cripto'] == cripto_simbolo]
 
             qtd_comprada = ops_cripto[ops_cripto['tipo_operacao'] == 'Compra']['quantidade'].sum()
             qtd_vendida = ops_cripto[ops_cripto['tipo_operacao'] == 'Venda']['quantidade'].sum()
@@ -505,9 +505,24 @@ def show_wallet_details():
     # Mapeia o display_name para o objeto completo da criptomoeda para fácil recuperação
     display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data}
 
+    # Função de callback para o selectbox
+    def on_crypto_select_change():
+        selected_name = st.session_state.cripto_select_outside_form
+        try:
+            st.session_state['selected_crypto_index'] = display_options.index(selected_name)
+        except ValueError:
+            st.session_state['selected_crypto_index'] = 0 # Fallback
+        st.session_state['current_selected_crypto_obj'] = display_name_to_crypto_map.get(selected_name)
+
     # Inicializa o índice do selectbox ou usa o valor previamente selecionado
     if 'selected_crypto_index' not in st.session_state:
         st.session_state['selected_crypto_index'] = 0 # Define o primeiro item como padrão
+        # Garante que o objeto da cripto inicial também seja definido
+        if display_options:
+            st.session_state['current_selected_crypto_obj'] = display_name_to_crypto_map.get(display_options[0])
+        else:
+            st.session_state['current_selected_crypto_obj'] = None
+
 
     # O selectbox exibirá apenas as strings de display_name
     selected_display_name = st.selectbox(
@@ -515,23 +530,12 @@ def show_wallet_details():
         options=display_options, 
         key="cripto_select_outside_form", # Chave diferente para estar fora do form
         help="Selecione a criptomoeda para a operação.",
-        index=st.session_state['selected_crypto_index'] # Usa o índice do session_state
+        index=st.session_state['selected_crypto_index'], # Usa o índice do session_state
+        on_change=on_crypto_select_change # Adiciona o callback aqui
     )
 
-    # Atualiza o índice do session_state após a seleção
-    if selected_display_name:
-        try:
-            st.session_state['selected_crypto_index'] = display_options.index(selected_display_name)
-        except ValueError:
-            st.session_state['selected_crypto_index'] = 0 
-        
-        st.session_state['current_selected_crypto_obj'] = display_name_to_crypto_map.get(selected_display_name)
-    else:
-        st.session_state['current_selected_crypto_obj'] = None
-        st.session_state['selected_crypto_index'] = 0
-
-
     # Recupera o objeto completo da criptomoeda selecionada do session_state para exibição
+    # Agora, selected_crypto_for_display deve sempre refletir a seleção atual devido ao on_change
     selected_crypto_for_display = st.session_state.get('current_selected_crypto_obj')
 
     # Exibe a logo e o nome completo da criptomoeda selecionada abaixo do selectbox
@@ -698,7 +702,7 @@ def show_wallet_details():
             df_operacoes = load_operacoes()
 
             if op_to_confirm_delete_id in df_operacoes['id'].values:
-                op_details = df_operacoes[df_operacoes['id'] == op_to_confirm_delete_id].iloc[0]
+                op_details = df_operacoes[op_details['id'] == op_to_confirm_delete_id].iloc[0]
                 op_info_display = (f"{op_details['tipo_operacao']} de {op_details['quantidade']:.8f} "
                                 f"{op_details['cripto']} (R$ {op_details['custo_total']:.2f}) em "
                                 f"{op_details['data_operacao'].strftime('%d/%m/%Y %H:%M')}")
@@ -738,7 +742,6 @@ def show_wallet_details():
         (df_operacoes['cpf_usuario'] == user_cpf)
     ].copy()
 
-    # CORREÇÃO AQUI: Troque ')' por ']'
     wallet_origin_map = df_carteiras.set_index('id')['nacional'].to_dict()
     wallet_operations_all['origem_carteira'] = wallet_operations_all['wallet_id'].map(wallet_origin_map)
 
@@ -922,7 +925,7 @@ def show_login():
             phone = st.text_input("Telefone")
             email = st.text_input("E‑mail")
             password = st.text_input("Senha", type="password")
-            password_confirm = st.text_input("Confirme a senha", type="password") # Corrigido type aqui
+            password_confirm = st.text_input("Confirme a senha", type="password") 
             submitted = st.form_submit_button("Cadastrar")
         if submitted:
             if password != password_confirm:
