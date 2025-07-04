@@ -389,7 +389,8 @@ def show_wallet_details():
 
         # --- Calcular detalhes do portfólio atual por cripto ---
         for cripto_simbolo in wallet_ops_for_portfolio['cripto'].unique():
-            ops_cripto = wallet_ops_for_portfolio[ops_cripto['cripto'] == cripto_simbolo]
+            # CORREÇÃO AQUI: Use wallet_ops_for_portfolio para filtrar
+            ops_cripto = wallet_ops_for_portfolio[wallet_ops_for_portfolio['cripto'] == cripto_simbolo]
 
             qtd_comprada = ops_cripto[ops_cripto['tipo_operacao'] == 'Compra']['quantidade'].sum()
             qtd_vendida = ops_cripto[ops_cripto['tipo_operacao'] == 'Venda']['quantidade'].sum()
@@ -702,7 +703,7 @@ def show_wallet_details():
             df_operacoes = load_operacoes()
 
             if op_to_confirm_delete_id in df_operacoes['id'].values:
-                op_details = df_operacoes[op_details['id'] == op_to_confirm_delete_id].iloc[0]
+                op_details = df_operacoes[df_operacoes['id'] == op_to_confirm_delete_id].iloc[0]
                 op_info_display = (f"{op_details['tipo_operacao']} de {op_details['quantidade']:.8f} "
                                 f"{op_details['cripto']} (R$ {op_details['custo_total']:.2f}) em "
                                 f"{op_details['data_operacao'].strftime('%d/%m/%Y %H:%M')}")
@@ -925,7 +926,7 @@ def show_login():
             phone = st.text_input("Telefone")
             email = st.text_input("E‑mail")
             password = st.text_input("Senha", type="password")
-            password_confirm = st.text_input("Confirme a senha", type="password") 
+            password_confirm = st.text_input("Confirme a senha", type="password")
             submitted = st.form_submit_button("Cadastrar")
         if submitted:
             if password != password_confirm:
