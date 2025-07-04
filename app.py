@@ -214,7 +214,7 @@ def show_dashboard():
                 st.rerun()
 
         st.markdown("---")
-        if st.button("🔒 Sair"):
+        if st.button("� Sair"):
             st.session_state["logged_in"] = False
             st.session_state["auth_page"] = "login"
             st.session_state["pagina_atual"] = "Portfólio"
@@ -524,28 +524,42 @@ def show_wallet_details():
     # Exibir as métricas em texto
     col_custo, col_lucro, col_valor_atual = st.columns(3)
     with col_custo:
-        st.metric(label="Custo Total da Carteira (Ativo)", value=format_currency_brl(total_custo_carteira_atualizado))
+        st.markdown(
+            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Custo Total da Carteira (Ativo)</p>"
+            f"<p style='text-align: center; font-size: 24px; font-weight: bold;'>{format_currency_brl(total_custo_carteira_atualizado)}</p>",
+            unsafe_allow_html=True
+        )
     with col_lucro:
         # Aplicar cor ao Lucro Realizado Total da Carteira
         color_lucro_total = "green" if total_lucro_realizado > 0 else ("red" if total_lucro_realizado < 0 else "black")
         st.markdown(
-            f"<p style='text-align: center; color: {color_lucro_total}; font-size: 24px; font-weight: bold; margin-bottom: 0;'>Lucro Realizado Total da Carteira</p>"
-            f"<p style='text-align: center; color: {color_lucro_total}; font-size: 20px;'>{format_currency_brl(total_lucro_realizado)}</p>", 
+            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Lucro Realizado Total da Carteira</p>"
+            f"<p style='text-align: center; color: {color_lucro_total}; font-size: 24px; font-weight: bold;'>{format_currency_brl(total_lucro_realizado)}</p>", 
             unsafe_allow_html=True
         )
     with col_valor_atual:
-        st.metric(label="Valor Atual da Carteira", value=format_currency_brl(total_valor_atual_carteira))
+        st.markdown(
+            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Valor Atual da Carteira</p>"
+            f"<p style='text-align: center; font-size: 24px; font-weight: bold;'>{format_currency_brl(total_valor_atual_carteira)}</p>",
+            unsafe_allow_html=True
+        )
 
 
     st.markdown("---")
     st.markdown("#### Portfolio Atual Detalhado")
     if not portfolio_df.empty:
+        # Calcular a coluna POSIÇÃO
+        if total_valor_atual_carteira > 0:
+            portfolio_df['POSIÇÃO'] = (portfolio_df['Valor Atual da Posição'] / total_valor_atual_carteira) * 100
+        else:
+            portfolio_df['POSIÇÃO'] = 0.0
+
         # Ordenar por 'Custo Total' em ordem decrescente
         portfolio_df = portfolio_df.sort_values(by='Custo Total', ascending=False)
 
-        # Definindo as colunas e seus respectivos ratios (ajustados para a nova coluna "Imagem")
-        col_names_portfolio = ["Imagem", "Cripto", "Quantidade", "Custo Total", "Custo Médio", "Lucro Realizado", "Preço Atual (BRL)", "Valor Atual da Posição"]
-        cols_ratio_portfolio = [0.05, 0.10, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15]
+        # Definindo as colunas e seus respectivos ratios (ajustados para a nova coluna "Imagem" e "POSIÇÃO")
+        col_names_portfolio = ["Imagem", "Cripto", "Quantidade", "Custo Total", "Custo Médio", "Lucro Realizado", "Preço Atual (BRL)", "Valor Atual da Posição", "POSIÇÃO"]
+        cols_ratio_portfolio = [0.05, 0.10, 0.13, 0.13, 0.13, 0.13, 0.13, 0.13, 0.07] # Ajustado para 9 colunas
 
         cols_portfolio = st.columns(cols_ratio_portfolio)
         for i, col_name in enumerate(col_names_portfolio):
@@ -576,6 +590,8 @@ def show_wallet_details():
                 st.write(format_currency_brl(row['Preço Atual (BRL)']))
             with cols_portfolio[7]: # Valor Atual da Posição
                 st.write(format_currency_brl(row['Valor Atual da Posição']))
+            with cols_portfolio[8]: # POSIÇÃO
+                st.write(f"{format_number_br(row['POSIÇÃO'], decimals=2)}%")
         st.markdown("---")
     else:
         st.info("Sua carteira não possui criptomoedas atualmente (todas as compras foram compensadas por vendas).")
