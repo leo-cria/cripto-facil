@@ -160,7 +160,32 @@ def get_current_crypto_price(crypto_symbol, df_cryptos_prices):
 # Função para formatar valores monetários para o padrão brasileiro
 def format_currency_brl(value):
     """Formata um valor numérico para o padrão monetário brasileiro (R$ X.XXX,XX)."""
+    # Garante que o valor é um número antes de formatar
+    if pd.isna(value):
+        return "-"
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+# Nova função para formatar números com vírgula para decimais e ponto para milhares
+def format_number_br(value, decimals=2):
+    """
+    Formata um valor numérico para o padrão brasileiro (ponto para milhares, vírgula para decimais).
+    Args:
+        value: O valor numérico a ser formatado.
+        decimals: Número de casas decimais.
+    Returns:
+        Uma string com o valor formatado.
+    """
+    if pd.isna(value):
+        return "-"
+    # Convertendo para string com o número de casas decimais desejado
+    formatted_value = f"{value:,.{decimals}f}"
+    # Substituindo a vírgula por 'X' temporariamente para evitar conflito
+    formatted_value = formatted_value.replace(",", "X")
+    # Substituindo o ponto por vírgula para o separador decimal
+    formatted_value = formatted_value.replace(".", ",")
+    # Substituindo 'X' de volta por ponto para o separador de milhares
+    formatted_value = formatted_value.replace("X", ".")
+    return formatted_value
 
 
 # --- Funções para Exibição do Dashboard ---
@@ -501,7 +526,13 @@ def show_wallet_details():
     with col_custo:
         st.metric(label="Custo Total da Carteira (Ativo)", value=format_currency_brl(total_custo_carteira_atualizado))
     with col_lucro:
-        st.metric(label="Lucro Realizado Total da Carteira", value=format_currency_brl(total_lucro_realizado))
+        # Aplicar cor ao Lucro Realizado Total da Carteira
+        color_lucro_total = "green" if total_lucro_realizado > 0 else ("red" if total_lucro_realizado < 0 else "black")
+        st.markdown(
+            f"<p style='text-align: center; color: {color_lucro_total}; font-size: 24px; font-weight: bold; margin-bottom: 0;'>Lucro Realizado Total da Carteira</p>"
+            f"<p style='text-align: center; color: {color_lucro_total}; font-size: 20px;'>{format_currency_brl(total_lucro_realizado)}</p>", 
+            unsafe_allow_html=True
+        )
     with col_valor_atual:
         st.metric(label="Valor Atual da Carteira", value=format_currency_brl(total_valor_atual_carteira))
 
@@ -532,7 +563,8 @@ def show_wallet_details():
             with cols_portfolio[1]: # Coluna Cripto
                 st.write(row['Cripto'])
             with cols_portfolio[2]:
-                st.write(f"{row['Quantidade']:.8f}")
+                # Formatar a quantidade com ponto e vírgula do Brasil
+                st.write(format_number_br(row['Quantidade'], decimals=8))
             with cols_portfolio[3]:
                 st.write(format_currency_brl(row['Custo Total']))
             with cols_portfolio[4]:
@@ -782,7 +814,8 @@ def show_wallet_details():
 
             if op_to_confirm_delete_id in df_operacoes['id'].values:
                 op_details = df_operacoes[df_operacoes['id'] == op_to_confirm_delete_id].iloc[0]
-                op_info_display = (f"{op_details['tipo_operacao']} de {op_details['quantidade']:.8f} "
+                # Modificar a exibição da quantidade para usar format_number_br
+                op_info_display = (f"{op_details['tipo_operacao']} de {format_number_br(op_details['quantidade'], decimals=8)} "
                                 f"{op_details['cripto']} ({format_currency_brl(op_details['custo_total'])}) em "
                                 f"{op_details['data_operacao'].strftime('%d/%m/%Y %H:%M')}")
 
@@ -912,21 +945,26 @@ def show_wallet_details():
         for idx, op_row in sorted_operations.iterrows():
             cols = st.columns(cols_ratio)
             with cols[0]:
-                st.write(op_row['tipo_operacao'])
+                # Colorir o tipo de operação
+                color_tipo = "green" if op_row['tipo_operacao'] == "Compra" else "red"
+                st.markdown(f"<span style='color:{color_tipo}'>{op_row['tipo_operacao']}</span>", unsafe_allow_html=True)
             with cols[1]: # Nova coluna para a Logo
                 st.markdown(op_row['crypto_image_html'], unsafe_allow_html=True)
             with cols[2]: # Coluna Cripto (apenas o texto)
                 st.write(op_row['cripto_text_display'])
             with cols[3]:
-                st.write(f"{op_row['quantidade']:.8f}") 
+                # Formatar a quantidade com ponto e vírgula do Brasil
+                st.write(format_number_br(op_row['quantidade'], decimals=8)) 
             with cols[4]: # PTAX
                 if pd.notna(op_row['ptax_na_op']):
-                    st.write(f"{op_row['ptax_na_op']:.4f}")
+                    # Formatar PTAX com 4 casas decimais
+                    st.write(format_number_br(op_row['ptax_na_op'], decimals=4))
                 else:
                     st.write("-")
             with cols[5]: # Valor Total (USDT)
                 if is_foreign_wallet and pd.notna(op_row['custo_total_usdt']):
-                    st.write(f'USDT {op_row["custo_total_usdt"]:.2f}')
+                    # Formatar Valor Total (USDT) com 2 casas decimais
+                    st.write(f'USDT {format_number_br(op_row["custo_total_usdt"], decimals=2)}')
                 else:
                     st.write("-")
             with cols[6]: # Valor Total (BRL)
