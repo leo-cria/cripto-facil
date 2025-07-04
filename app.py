@@ -496,56 +496,94 @@ def show_wallet_details():
         index=["Compra", "Venda"].index(st.session_state['current_tipo_operacao'])
     )
 
+    # Carrega a lista de dicionários de criptomoedas
+    cryptocurrencies_data = load_cryptocurrencies_from_file()
+    
+    # Cria uma lista de strings para exibição no selectbox (apenas o display_name)
+    display_options = [crypto['display_name'] for crypto in cryptocurrencies_data]
+    
+    # Mapeia o display_name para o objeto completo da criptomoeda para fácil recuperação
+    display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data}
+
+    # Inicializa o índice do selectbox ou usa o valor previamente selecionado
+    if 'selected_crypto_index' not in st.session_state:
+        st.session_state['selected_crypto_index'] = 0 # Define o primeiro item como padrão
+
+    # O selectbox exibirá apenas as strings de display_name
+    # O on_change é usado para atualizar o índice no session_state
+    selected_display_name = st.selectbox(
+        "Criptomoeda", 
+        options=display_options, 
+        key="cripto_select_outside_form", # Chave diferente para estar fora do form
+        help="Selecione a criptomoeda para a operação.",
+        index=st.session_state['selected_crypto_index'] # Usa o índice do session_state
+    )
+
+    # Atualiza o índice do session_state após a seleção
+    # Isso garante que a logo e o nome mudem imediatamente
+    if selected_display_name:
+        try:
+            # Encontra o índice do item selecionado para persistir
+            st.session_state['selected_crypto_index'] = display_options.index(selected_display_name)
+        except ValueError:
+            # Caso o item não seja encontrado (ex: dados antigos no CSV)
+            st.session_state['selected_crypto_index'] = 0 # Volta para o primeiro item
+        
+        # Atualiza o objeto completo da criptomoeda selecionada no session_state
+        st.session_state['current_selected_crypto_obj'] = display_name_to_crypto_map.get(selected_display_name)
+    else:
+        st.session_state['current_selected_crypto_obj'] = None
+        st.session_state['selected_crypto_index'] = 0
+
+
+    # Recupera o objeto completo da criptomoeda selecionada do session_state para exibição
+    selected_crypto_for_display = st.session_state.get('current_selected_crypto_obj')
+
+    # Exibe a logo e o nome completo da criptomoeda selecionada abaixo do selectbox
+    cripto_symbol = "" # Inicializa cripto_symbol
+    if selected_crypto_for_display:
+        st.markdown(
+            f"<img src='{selected_crypto_for_display['image']}' width='30' height='30' style='vertical-align:middle; margin-right:10px;'> "
+            f"**{selected_crypto_for_display['symbol']}** - {selected_crypto_for_display['name']}", 
+            unsafe_allow_html=True
+        )
+        cripto_symbol = selected_crypto_for_display['symbol'] # Atribui o símbolo para uso posterior
+    else:
+        st.markdown("<p style='color:orange;'>Selecione uma criptomoeda para ver os detalhes.</p>", unsafe_allow_html=True)
+
+
+    # Define uma função para limpar os campos do formulário
+    def clear_operation_form():
+        st.session_state['quantidade_input'] = 0.00000001
+        st.session_state['custo_total_input'] = 0.01
+        st.session_state['ptax_input'] = 5.00 # Ou o valor padrão que você preferir
+        st.session_state['data_op_input'] = datetime.today().date()
+        st.session_state['hora_op_input'] = datetime.now().time()
+        # Não precisa limpar o selectbox, pois ele já é atualizado dinamicamente
+
+    # Inicializa os valores do formulário no session_state se não existirem
+    if 'quantidade_input' not in st.session_state:
+        st.session_state['quantidade_input'] = 0.00000001
+    if 'custo_total_input' not in st.session_state:
+        st.session_state['custo_total_input'] = 0.01
+    if 'ptax_input' not in st.session_state:
+        st.session_state['ptax_input'] = 5.00
+    if 'data_op_input' not in st.session_state:
+        st.session_state['data_op_input'] = datetime.today().date()
+    if 'hora_op_input' not in st.session_state:
+        st.session_state['hora_op_input'] = datetime.now().time()
+
     with st.form("form_nova_operacao"):
         current_op_type = st.session_state['current_tipo_operacao']
 
-        # Carrega a lista de dicionários de criptomoedas
-        cryptocurrencies_data = load_cryptocurrencies_from_file()
-        
-        # Cria uma lista de strings para exibição no selectbox (apenas o display_name)
-        display_options = [crypto['display_name'] for crypto in cryptocurrencies_data]
-        
-        # Mapeia o display_name para o objeto completo da criptomoeda para fácil recuperação
-        display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data}
-
-        # O selectbox exibirá apenas as strings de display_name
-        # Removido o on_change para evitar StreamlitInvalidFormCallbackError
-        selected_display_name = st.selectbox(
-            "Criptomoeda", 
-            options=display_options, 
-            key="cripto_select",
-            help="Selecione a criptomoeda para a operação."
+        # Campos do formulário usando as chaves do session_state
+        quantidade = st.number_input(
+            "Quantidade", 
+            min_value=0.00000001, 
+            format="%.8f", 
+            key="quantidade_input",
+            value=st.session_state['quantidade_input']
         )
-
-        # Atualiza o session_state com o objeto selecionado APÓS a seleção do selectbox
-        # Isso garante que a re-execução do script pegue o valor correto.
-        if selected_display_name: # Garante que algo foi selecionado
-            st.session_state['current_selected_crypto_obj'] = display_name_to_crypto_map.get(selected_display_name)
-        else:
-            st.session_state['current_selected_crypto_obj'] = None
-
-
-        # Recupera o objeto completo da criptomoeda selecionada do session_state para exibição
-        selected_crypto_for_display = st.session_state.get('current_selected_crypto_obj')
-
-        # Exibe a logo e o nome completo da criptomoeda selecionada abaixo do selectbox
-        if selected_crypto_for_display:
-            st.markdown(
-                f"<img src='{selected_crypto_for_display['image']}' width='30' height='30' style='vertical-align:middle; margin-right:10px;'> "
-                f"**{selected_crypto_for_display['symbol']}** - {selected_crypto_for_display['name']}", 
-                unsafe_allow_html=True
-            )
-            cripto_symbol = selected_crypto_for_display['symbol'] # Atribui o símbolo para uso posterior
-        else:
-            # Se nada for selecionado ou ocorrer um problema, defina um símbolo vazio
-            cripto_symbol = "" 
-            # Removido o st.warning aqui para evitar que apareça sempre que a página carrega
-            # A validação final será feita no submit do formulário
-            st.markdown("<p style='color:orange;'>Selecione uma criptomoeda para ver os detalhes.</p>", unsafe_allow_html=True)
-
-
-        # Campo de quantidade para garantir tratamento decimal
-        quantidade = st.number_input("Quantidade", min_value=0.00000001, format="%.8f", key="quantidade_input")
 
         valor_label_base = ""
         if is_foreign_wallet:
@@ -553,7 +591,13 @@ def show_wallet_details():
         else:
             valor_label_base = "Custo Total (em BRL)" if current_op_type == "Compra" else "Total da Venda (em BRL)"
 
-        custo_total_input = st.number_input(valor_label_base, min_value=0.01, format="%.2f", key="custo_total_input")
+        custo_total_input = st.number_input(
+            valor_label_base, 
+            min_value=0.01, 
+            format="%.2f", 
+            key="custo_total_input",
+            value=st.session_state['custo_total_input']
+        )
 
         ptax_input = 1.0 # Default para carteiras nacionais, ou se não for informada
         valor_em_brl_preview = 0.0
@@ -563,16 +607,24 @@ def show_wallet_details():
                 "Taxa PTAX (BRL por USDT)",
                 min_value=0.01,
                 format="%.4f",
-                value=5.00, # Valor padrão para teste, pode ser alterado
-                key="ptax_input"
+                key="ptax_input",
+                value=st.session_state['ptax_input']
             )
-            valor_em_brl_preview = custo_total_input * ptax_input # Calcular para salvar, mas não exibir
+            valor_em_brl_preview = custo_total_input * ptax_input 
         else:
             valor_em_brl_preview = custo_total_input
 
 
-        data_operacao = st.date_input("Data da Operação", value="today", key="data_op_input")
-        hora_operacao = st.time_input("Hora da Operação", value=datetime.now().time(), key="hora_op_input")
+        data_operacao = st.date_input(
+            "Data da Operação", 
+            key="data_op_input",
+            value=st.session_state['data_op_input']
+        )
+        hora_operacao = st.time_input(
+            "Hora da Operação", 
+            key="hora_op_input",
+            value=st.session_state['hora_op_input']
+        )
 
         submitted_op = st.form_submit_button("Registrar Operação ✅")
 
@@ -639,6 +691,7 @@ def show_wallet_details():
 
                 save_operacoes(pd.concat([df_operacoes_existentes, nova_operacao], ignore_index=True))
                 st.success("Operação registrada com sucesso!")
+                clear_operation_form() # Chama a função para limpar o formulário
                 st.rerun()
 
     st.markdown("---")
