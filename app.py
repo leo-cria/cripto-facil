@@ -214,7 +214,7 @@ def show_dashboard():
                 st.rerun()
 
         st.markdown("---")
-        if st.button("� Sair"):
+        if st.button("🔒 Sair"):
             st.session_state["logged_in"] = False
             st.session_state["auth_page"] = "login"
             st.session_state["pagina_atual"] = "Portfólio"
@@ -559,7 +559,7 @@ def show_wallet_details():
 
         # Definindo as colunas e seus respectivos ratios (ajustados para a nova coluna "Imagem" e "POSIÇÃO")
         col_names_portfolio = ["Imagem", "Cripto", "Quantidade", "Custo Total", "Custo Médio", "Lucro Realizado", "Preço Atual (BRL)", "Valor Atual da Posição", "POSIÇÃO"]
-        cols_ratio_portfolio = [0.05, 0.10, 0.13, 0.13, 0.13, 0.13, 0.13, 0.13, 0.07] # Ajustado para 9 colunas
+        cols_ratio_portfolio = [0.05, 0.10, 0.12, 0.12, 0.12, 0.12, 0.12, 0.12, 0.13] # Ajustado para 9 colunas
 
         cols_portfolio = st.columns(cols_ratio_portfolio)
         for i, col_name in enumerate(col_names_portfolio):
@@ -594,7 +594,7 @@ def show_wallet_details():
                 st.write(f"{format_number_br(row['POSIÇÃO'], decimals=2)}%")
         st.markdown("---")
     else:
-        st.info("Sua carteira não possui criptomoedas atualmente (todas as compras foram compensadas por vendas).")
+        st.info("Sua carteira não possui criptomoedas atualmente (todas as compras foram compensadas por vendas ou não há operações registradas com saldo positivo).")
 
 
     st.markdown("---")
@@ -948,7 +948,7 @@ def show_wallet_details():
         ]
         # Ajustando os ratios das colunas para caber na tela
         # Total deve somar 1.0 ou próximo.
-        cols_ratio = [0.05, 0.04, 0.08, 0.08, 0.06, 0.10, 0.10, 0.10, 0.10, 0.10, 0.07, 0.06, 0.06] 
+        cols_ratio = [0.05, 0.04, 0.10, 0.08, 0.06, 0.09, 0.09, 0.09, 0.09, 0.09, 0.08, 0.06, 0.08] 
 
         cols = st.columns(cols_ratio)
         for i, col_name in enumerate(col_names):
