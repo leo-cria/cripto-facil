@@ -510,7 +510,6 @@ def show_wallet_details():
         st.session_state['selected_crypto_index'] = 0 # Define o primeiro item como padrão
 
     # O selectbox exibirá apenas as strings de display_name
-    # O on_change é usado para atualizar o índice no session_state
     selected_display_name = st.selectbox(
         "Criptomoeda", 
         options=display_options, 
@@ -520,16 +519,12 @@ def show_wallet_details():
     )
 
     # Atualiza o índice do session_state após a seleção
-    # Isso garante que a logo e o nome mudem imediatamente
     if selected_display_name:
         try:
-            # Encontra o índice do item selecionado para persistir
             st.session_state['selected_crypto_index'] = display_options.index(selected_display_name)
         except ValueError:
-            # Caso o item não seja encontrado (ex: dados antigos no CSV)
-            st.session_state['selected_crypto_index'] = 0 # Volta para o primeiro item
+            st.session_state['selected_crypto_index'] = 0 
         
-        # Atualiza o objeto completo da criptomoeda selecionada no session_state
         st.session_state['current_selected_crypto_obj'] = display_name_to_crypto_map.get(selected_display_name)
     else:
         st.session_state['current_selected_crypto_obj'] = None
@@ -552,39 +547,29 @@ def show_wallet_details():
         st.markdown("<p style='color:orange;'>Selecione uma criptomoeda para ver os detalhes.</p>", unsafe_allow_html=True)
 
 
-    # Define uma função para limpar os campos do formulário
-    # Esta função será chamada APÓS a submissão bem-sucedida do formulário
-    def reset_form_fields():
-        st.session_state['quantidade_input'] = 0.00000001
-        st.session_state['custo_total_input'] = 0.01
-        st.session_state['ptax_input'] = 5.00 # Ou o valor padrão que você preferir
-        st.session_state['data_op_input'] = datetime.today().date()
-        st.session_state['hora_op_input'] = datetime.now().time()
-        # Não precisa limpar o selectbox, pois ele já é atualizado dinamicamente
-
     # Inicializa os valores do formulário no session_state se não existirem
-    # Isso é importante para que os widgets tenham um valor inicial ao carregar a página
-    if 'quantidade_input' not in st.session_state:
-        st.session_state['quantidade_input'] = 0.00000001
-    if 'custo_total_input' not in st.session_state:
-        st.session_state['custo_total_input'] = 0.01
-    if 'ptax_input' not in st.session_state:
-        st.session_state['ptax_input'] = 5.00
-    if 'data_op_input' not in st.session_state:
-        st.session_state['data_op_input'] = datetime.today().date()
-    if 'hora_op_input' not in st.session_state:
-        st.session_state['hora_op_input'] = datetime.now().time()
+    # Estes valores serão usados como 'value' para os widgets do formulário
+    if 'quantidade_input_value' not in st.session_state:
+        st.session_state['quantidade_input_value'] = 0.00000001
+    if 'custo_total_input_value' not in st.session_state:
+        st.session_state['custo_total_input_value'] = 0.01
+    if 'ptax_input_value' not in st.session_state:
+        st.session_state['ptax_input_value'] = 5.00
+    if 'data_op_input_value' not in st.session_state:
+        st.session_state['data_op_input_value'] = datetime.today().date()
+    if 'hora_op_input_value' not in st.session_state:
+        st.session_state['hora_op_input_value'] = datetime.now().time()
 
     with st.form("form_nova_operacao"):
         current_op_type = st.session_state['current_tipo_operacao']
 
-        # Campos do formulário usando as chaves do session_state
+        # Campos do formulário usando as chaves do session_state para seus valores
         quantidade = st.number_input(
             "Quantidade", 
             min_value=0.00000001, 
             format="%.8f", 
-            key="quantidade_input",
-            value=st.session_state['quantidade_input']
+            key="quantidade_input_form", # Chave específica para o widget dentro do form
+            value=st.session_state['quantidade_input_value']
         )
 
         valor_label_base = ""
@@ -597,8 +582,8 @@ def show_wallet_details():
             valor_label_base, 
             min_value=0.01, 
             format="%.2f", 
-            key="custo_total_input",
-            value=st.session_state['custo_total_input']
+            key="custo_total_input_form", # Chave específica para o widget dentro do form
+            value=st.session_state['custo_total_input_value']
         )
 
         ptax_input = 1.0 # Default para carteiras nacionais, ou se não for informada
@@ -609,8 +594,8 @@ def show_wallet_details():
                 "Taxa PTAX (BRL por USDT)",
                 min_value=0.01,
                 format="%.4f",
-                key="ptax_input",
-                value=st.session_state['ptax_input']
+                key="ptax_input_form", # Chave específica para o widget dentro do form
+                value=st.session_state['ptax_input_value']
             )
             valor_em_brl_preview = custo_total_input * ptax_input 
         else:
@@ -619,13 +604,13 @@ def show_wallet_details():
 
         data_operacao = st.date_input(
             "Data da Operação", 
-            key="data_op_input",
-            value=st.session_state['data_op_input']
+            key="data_op_input_form", # Chave específica para o widget dentro do form
+            value=st.session_state['data_op_input_value']
         )
         hora_operacao = st.time_input(
             "Hora da Operação", 
-            key="hora_op_input",
-            value=st.session_state['hora_op_input']
+            key="hora_op_input_form", # Chave específica para o widget dentro do form
+            value=st.session_state['hora_op_input_value']
         )
 
         submitted_op = st.form_submit_button("Registrar Operação ✅")
@@ -693,7 +678,14 @@ def show_wallet_details():
 
                 save_operacoes(pd.concat([df_operacoes_existentes, nova_operacao], ignore_index=True))
                 st.success("Operação registrada com sucesso!")
-                reset_form_fields() # Chama a função para limpar o formulário
+                
+                # Limpa os campos do formulário redefinindo os valores no session_state
+                st.session_state['quantidade_input_value'] = 0.00000001
+                st.session_state['custo_total_input_value'] = 0.01
+                st.session_state['ptax_input_value'] = 5.00 
+                st.session_state['data_op_input_value'] = datetime.today().date()
+                st.session_state['hora_op_input_value'] = datetime.now().time()
+                
                 st.rerun()
 
     st.markdown("---")
@@ -746,7 +738,7 @@ def show_wallet_details():
         (df_operacoes['cpf_usuario'] == user_cpf)
     ].copy()
 
-    wallet_origin_map = df_carteiras.set_index('id')['nacional'].to_dict()
+    wallet_origin_map = df_carteiras.set_index('id')['nacional').to_dict()
     wallet_operations_all['origem_carteira'] = wallet_operations_all['wallet_id'].map(wallet_origin_map)
 
     # Adicionar coluna 'custo_total_usdt' para carteiras estrangeiras
@@ -929,7 +921,7 @@ def show_login():
             phone = st.text_input("Telefone")
             email = st.text_input("E‑mail")
             password = st.text_input("Senha", type="password")
-            password_confirm = st.text_input("Confirme a senha", type="type")
+            password_confirm = st.text_input("Confirme a senha", type="password") # Corrigido type aqui
             submitted = st.form_submit_button("Cadastrar")
         if submitted:
             if password != password_confirm:
