@@ -121,8 +121,8 @@ def load_cryptocurrencies_from_file():
     """
     Carrega a lista de criptomoedas de um arquivo JSON local.
     Retorna uma lista vazia se o arquivo não existir ou houver erro.
-    O formato esperado é uma lista de dicionários com 'symbol', 'name', 'image' e 'display_name',
-    e agora também 'current_price_brl'.
+    O formato esperado é um dicionário com 'last_updated_timestamp' e 'cryptos',
+    onde 'cryptos' é uma lista de dicionários com 'symbol', 'name', 'image', 'display_name' e 'current_price_brl'.
     """
     if os.path.exists(CRYPTOS_FILE):
         try:
@@ -157,6 +157,12 @@ def get_current_crypto_price(crypto_symbol, df_cryptos_prices):
         return price_row['current_price_brl'].iloc[0]
     return 0.0 # Retorna 0.0 se não encontrar o preço
 
+# Função para formatar valores monetários para o padrão brasileiro
+def format_currency_brl(value):
+    """Formata um valor numérico para o padrão monetário brasileiro (R$ X.XXX,XX)."""
+    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 # --- Funções para Exibição do Dashboard ---
 def show_dashboard():
     """
@@ -174,7 +180,6 @@ def show_dashboard():
             "Detalhes da Carteira": "📂 Detalhes da Carteira e Operações"
         }
 
-        # Removendo "Operações" do menu lateral
         for page_name in ["Portfólio", "Minha Conta", "Carteiras", "Relatórios", "Imposto de Renda"]:
             if st.button(page_name, key=f"sidebar_btn_{page_name.lower().replace(' ', '_')}"):
                 st.session_state["pagina_atual"] = page_name
@@ -200,18 +205,6 @@ def show_dashboard():
     # Carrega os dados mais recentes das criptomoedas e a data de atualização
     last_updated_timestamp, df_cryptos_prices = load_cryptocurrencies_from_file()
     
-    # Adiciona a data de atualização no topo
-    if last_updated_timestamp:
-        try:
-            # Converte a string ISO para objeto datetime e formata para dd/mm/aaaa
-            updated_dt = datetime.fromisoformat(last_updated_timestamp)
-            st.markdown(f"**Data do Valor Atual da Carteira:** {updated_dt.strftime('%d/%m/%Y')}")
-        except ValueError:
-            st.markdown("Não foi possível formatar a data de atualização da API.")
-    else:
-        st.markdown("Data de atualização da API não disponível.")
-
-
     if page == "Minha Conta":
         df = load_users()
         usuario = df[df['cpf'] == st.session_state["cpf"]].iloc[0]
@@ -402,7 +395,26 @@ def show_wallet_details():
     st.markdown("---")
 
     # --- Seção do Portfólio Consolidado da Carteira ---
-    st.markdown("#### Portfólio Consolidado da Carteira")
+    
+    # Carrega os dados de criptomoedas para ter os preços atuais
+    last_updated_timestamp, cryptocurrencies_data_df = load_cryptocurrencies_from_file()
+    crypto_prices = {crypto['symbol'].upper(): crypto.get('current_price_brl', 0) for crypto in cryptocurrencies_data_df.to_dict('records')}
+
+    # Título do Portfólio Consolidado com a data de atualização
+    col_portfolio_title, col_update_date = st.columns([0.7, 0.3])
+    with col_portfolio_title:
+        st.markdown("#### Portfólio Consolidado da Carteira")
+    with col_update_date:
+        if last_updated_timestamp:
+            try:
+                # Converte a string ISO para objeto datetime e formata para dd/mm/aaaa
+                updated_dt = datetime.fromisoformat(last_updated_timestamp)
+                st.markdown(f"**Atualizado em:** {updated_dt.strftime('%d/%m/%Y')}")
+            except ValueError:
+                st.markdown("Não foi possível formatar a data de atualização da API.")
+        else:
+            st.markdown("Data de atualização da API não disponível.")
+
 
     df_operacoes_portfolio = load_operacoes()
     wallet_ops_for_portfolio = df_operacoes_portfolio[
@@ -411,14 +423,9 @@ def show_wallet_details():
     ].copy()
 
     total_lucro_realizado = 0.0
-    total_valor_atual_carteira = 0.0 # Nova variável para o valor atual da carteira
+    total_valor_atual_carteira = 0.0
 
     portfolio_detail = {}
-
-    # Carrega os dados de criptomoedas para ter os preços atuais
-    last_updated_timestamp_crypto, cryptocurrencies_data = load_cryptocurrencies_from_file()
-    crypto_prices = {crypto['symbol'].upper(): crypto.get('current_price_brl', 0) for crypto in cryptocurrencies_data.to_dict('records')}
-
 
     if not wallet_ops_for_portfolio.empty:
         # Calcular Lucro Realizado da Carteira (soma de lucro_prejuizo_na_op de vendas)
@@ -464,19 +471,24 @@ def show_wallet_details():
                 valor_atual_posicao = quantidade_atual * current_price
                 total_valor_atual_carteira += valor_atual_posicao # Adiciona ao total da carteira
 
+                # Encontrar a imagem da cripto
+                crypto_info = cryptocurrencies_data_df[cryptocurrencies_data_df['symbol'] == cripto_simbolo.upper()]
+                image_url = crypto_info['image'].iloc[0] if not crypto_info.empty else ""
+
                 portfolio_detail[cripto_simbolo] = {
-                    'quantidade': float(quantidade_atual), # Garante que é float
-                    'custo_total': float(custo_total_atual_estimado), # Garante que é float
-                    'custo_medio': float(custo_medio), # Garante que é float
-                    'lucro_realizado': float(lucro_realizado_cripto), # Garante que é float
-                    'current_price_brl': float(current_price), # Preço atual em BRL
-                    'valor_atual_posicao': float(valor_atual_posicao) # Valor atual da posição
+                    'image': image_url, # Adiciona a URL da imagem
+                    'quantidade': float(quantidade_atual),
+                    'custo_total': float(custo_total_atual_estimado),
+                    'custo_medio': float(custo_medio),
+                    'lucro_realizado': float(lucro_realizado_cripto),
+                    'current_price_brl': float(current_price),
+                    'valor_atual_posicao': float(valor_atual_posicao)
                 }
 
     # Criar DataFrame para o portfólio detalhado
     portfolio_df = pd.DataFrame.from_dict(portfolio_detail, orient='index').reset_index()
     if not portfolio_df.empty:
-        portfolio_df.columns = ['Cripto', 'Quantidade', 'Custo Total', 'Custo Médio', 'Lucro Realizado', 'Preço Atual (BRL)', 'Valor Atual da Posição']
+        portfolio_df.columns = ['Cripto', 'Imagem', 'Quantidade', 'Custo Total', 'Custo Médio', 'Lucro Realizado', 'Preço Atual (BRL)', 'Valor Atual da Posição']
         portfolio_df = portfolio_df[portfolio_df['Quantidade'] > 0] # Filtrar só as que tem saldo > 0
 
         # Calcular o Custo Total da Carteira com base no portfolio_df filtrado
@@ -485,13 +497,13 @@ def show_wallet_details():
         total_custo_carteira_atualizado = 0.0
 
     # Exibir as métricas em texto
-    col_custo, col_lucro, col_valor_atual = st.columns(3) # Adicionado mais uma coluna
+    col_custo, col_lucro, col_valor_atual = st.columns(3)
     with col_custo:
-        st.metric(label="Custo Total da Carteira (Ativo)", value=f"R$ {total_custo_carteira_atualizado:,.2f}")
+        st.metric(label="Custo Total da Carteira (Ativo)", value=format_currency_brl(total_custo_carteira_atualizado))
     with col_lucro:
-        st.metric(label="Lucro Realizado Total da Carteira", value=f"R$ {total_lucro_realizado:,.2f}")
-    with col_valor_atual: # Nova métrica
-        st.metric(label="Valor Atual da Carteira", value=f"R$ {total_valor_atual_carteira:,.2f}")
+        st.metric(label="Lucro Realizado Total da Carteira", value=format_currency_brl(total_lucro_realizado))
+    with col_valor_atual:
+        st.metric(label="Valor Atual da Carteira", value=format_currency_brl(total_valor_atual_carteira))
 
 
     st.markdown("---")
@@ -500,9 +512,9 @@ def show_wallet_details():
         # Ordenar por 'Custo Total' em ordem decrescente
         portfolio_df = portfolio_df.sort_values(by='Custo Total', ascending=False)
 
-        # Adicionando 'Preço Atual (BRL)' e 'Valor Atual da Posição' às colunas
-        col_names_portfolio = ["Cripto", "Quantidade", "Custo Total", "Custo Médio", "Lucro Realizado", "Preço Atual (BRL)", "Valor Atual da Posição"]
-        cols_ratio_portfolio = [0.10, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15] # Ajustando os ratios
+        # Definindo as colunas e seus respectivos ratios (ajustados para a nova coluna "Imagem")
+        col_names_portfolio = ["Imagem", "Cripto", "Quantidade", "Custo Total", "Custo Médio", "Lucro Realizado", "Preço Atual (BRL)", "Valor Atual da Posição"]
+        cols_ratio_portfolio = [0.05, 0.10, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15]
 
         cols_portfolio = st.columns(cols_ratio_portfolio)
         for i, col_name in enumerate(col_names_portfolio):
@@ -512,22 +524,26 @@ def show_wallet_details():
 
         for idx, row in portfolio_df.iterrows():
             cols_portfolio = st.columns(cols_ratio_portfolio)
-            with cols_portfolio[0]:
+            with cols_portfolio[0]: # Coluna Imagem
+                if row['Imagem']:
+                    st.markdown(f"<img src='{row['Imagem']}' width='24' height='24'>", unsafe_allow_html=True)
+                else:
+                    st.write("➖")
+            with cols_portfolio[1]: # Coluna Cripto
                 st.write(row['Cripto'])
-            with cols_portfolio[1]:
-                # Exibir quantidade com 8 casas decimais
-                st.write(f"{row['Quantidade']:.8f}")
             with cols_portfolio[2]:
-                st.write(f"R$ {row['Custo Total']:.2f}")
+                st.write(f"{row['Quantidade']:.8f}")
             with cols_portfolio[3]:
-                st.write(f"R$ {row['Custo Médio']:.2f}")
+                st.write(format_currency_brl(row['Custo Total']))
             with cols_portfolio[4]:
+                st.write(format_currency_brl(row['Custo Médio']))
+            with cols_portfolio[5]:
                 color = "green" if row['Lucro Realizado'] >= 0 else "red"
-                st.markdown(f"<span style='color:{color}'>R$ {row['Lucro Realizado']:.2f}</span>", unsafe_allow_html=True)
-            with cols_portfolio[5]: # Preço Atual (BRL)
-                st.write(f"R$ {row['Preço Atual (BRL)']:.2f}")
-            with cols_portfolio[6]: # Valor Atual da Posição
-                st.write(f"R$ {row['Valor Atual da Posição']:.2f}")
+                st.markdown(f"<span style='color:{color}'>{format_currency_brl(row['Lucro Realizado'])}</span>", unsafe_allow_html=True)
+            with cols_portfolio[6]: # Preço Atual (BRL)
+                st.write(format_currency_brl(row['Preço Atual (BRL)']))
+            with cols_portfolio[7]: # Valor Atual da Posição
+                st.write(format_currency_brl(row['Valor Atual da Posição']))
         st.markdown("---")
     else:
         st.info("Sua carteira não possui criptomoedas atualmente (todas as compras foram compensadas por vendas).")
@@ -553,9 +569,9 @@ def show_wallet_details():
     )
 
     # Carrega a lista de dicionários de criptomoedas
-    # A variável cryptocurrencies_data já é um DataFrame aqui
+    # A variável cryptocurrencies_data_df já é um DataFrame aqui
     # A função load_cryptocurrencies_from_file retorna (last_updated, df_cryptos)
-    # Então, cryptocurrencies_data é o df_cryptos
+    # Então, cryptocurrencies_data_df é o df_cryptos
     _, cryptocurrencies_data_df = load_cryptocurrencies_from_file()
     
     # Cria uma lista de strings para exibição no selectbox (apenas o display_name)
@@ -767,7 +783,7 @@ def show_wallet_details():
             if op_to_confirm_delete_id in df_operacoes['id'].values:
                 op_details = df_operacoes[df_operacoes['id'] == op_to_confirm_delete_id].iloc[0]
                 op_info_display = (f"{op_details['tipo_operacao']} de {op_details['quantidade']:.8f} "
-                                f"{op_details['cripto']} (R$ {op_details['custo_total']:.2f}) em "
+                                f"{op_details['cripto']} ({format_currency_brl(op_details['custo_total'])}) em "
                                 f"{op_details['data_operacao'].strftime('%d/%m/%Y %H:%M')}")
 
                 st.markdown(f"""
@@ -914,24 +930,24 @@ def show_wallet_details():
                 else:
                     st.write("-")
             with cols[6]: # Valor Total (BRL)
-                st.write(f"R$ {op_row['custo_total']:.2f}") 
+                st.write(format_currency_brl(op_row['custo_total']))
             with cols[7]:
                 if op_row['tipo_operacao'] == 'Compra' and pd.notna(op_row['preco_medio_compra_na_op']):
-                    st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}") 
+                    st.write(format_currency_brl(op_row['preco_medio_compra_na_op']))
                 elif op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['preco_medio_compra_na_op']):
-                    st.write(f"R$ {op_row['preco_medio_compra_na_op']:.2f}")
+                    st.write(format_currency_brl(op_row['preco_medio_compra_na_op']))
                 else:
                     st.write("-")
             with cols[8]:
                 if op_row['tipo_operacao'] == 'Venda' and op_row['quantidade'] > 0:
-                    st.write(f'R$ {(op_row["custo_total"] / op_row["quantidade"]):.2f}')
+                    st.write(format_currency_brl(op_row["custo_total"] / op_row["quantidade"]))
                 else:
                     st.write("-")
             with cols[9]:
                 if op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['lucro_prejuizo_na_op']):
                     profit_loss = op_row['lucro_prejuizo_na_op']
                     color = "green" if profit_loss >= 0 else "red"
-                    st.markdown(f"<span style='color:{color}'>R$ {profit_loss:.2f}</span>", unsafe_allow_html=True)
+                    st.markdown(f"<span style='color:{color}'>{format_currency_brl(profit_loss)}</span>", unsafe_allow_html=True)
                 else:
                     st.write("-")
             with cols[10]:
@@ -959,8 +975,6 @@ def show_login():
     <h1 style='text-align:center;'>🟧₿ Cripto Fácil</h1>
     <p style='text-align:center;color:gray;'>Gestor de criptoativos com relatórios para IRPF</p><hr>
     """, unsafe_allow_html=True)
-
-    # st.session_state inicializado no início do script, não aqui.
 
     if st.session_state["auth_page"] == "login":
         with st.form("login_form"):
