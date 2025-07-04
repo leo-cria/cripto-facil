@@ -738,7 +738,8 @@ def show_wallet_details():
         (df_operacoes['cpf_usuario'] == user_cpf)
     ].copy()
 
-    wallet_origin_map = df_carteiras.set_index('id')['nacional').to_dict()
+    # CORREÇÃO AQUI: Troque ')' por ']'
+    wallet_origin_map = df_carteiras.set_index('id')['nacional'].to_dict()
     wallet_operations_all['origem_carteira'] = wallet_operations_all['wallet_id'].map(wallet_origin_map)
 
     # Adicionar coluna 'custo_total_usdt' para carteiras estrangeiras
