@@ -121,13 +121,14 @@ def load_cryptocurrencies_from_file():
     """
     Carrega a lista de criptomoedas de um arquivo JSON local.
     Retorna uma lista vazia se o arquivo não existir ou houver erro.
-    O formato esperado é uma lista de dicionários com 'symbol', 'name', 'image' e 'display_name'.
+    O formato esperado é uma lista de dicionários com 'symbol', 'name', 'image' e 'display_name',
+    e agora também 'current_price_brl'.
     """
     if os.path.exists(CRYPTOS_FILE):
         try:
             with open(CRYPTOS_FILE, "r", encoding="utf-8") as f:
                 cryptos_data = json.load(f)
-                # Retorna a lista de dicionários, onde cada dicionário tem 'symbol', 'name', 'image' e 'display_name'
+                # Retorna a lista de dicionários
                 return cryptos_data
         except json.JSONDecodeError:
             st.error(f"Erro ao decodificar o arquivo {CRYPTOS_FILE}. Verifique o formato JSON.")
@@ -375,8 +376,14 @@ def show_wallet_details():
     ].copy()
 
     total_lucro_realizado = 0.0
+    total_valor_atual_carteira = 0.0 # Nova variável para o valor atual da carteira
 
     portfolio_detail = {}
+
+    # Carrega os dados de criptomoedas para ter os preços atuais
+    cryptocurrencies_data = load_cryptocurrencies_from_file()
+    crypto_prices = {crypto['symbol'].upper(): crypto.get('current_price_brl', 0) for crypto in cryptocurrencies_data}
+
 
     if not wallet_ops_for_portfolio.empty:
         # Calcular Lucro Realizado da Carteira (soma de lucro_prejuizo_na_op de vendas)
@@ -389,7 +396,6 @@ def show_wallet_details():
 
         # --- Calcular detalhes do portfólio atual por cripto ---
         for cripto_simbolo in wallet_ops_for_portfolio['cripto'].unique():
-            # CORREÇÃO AQUI: Use wallet_ops_for_portfolio para filtrar
             ops_cripto = wallet_ops_for_portfolio[wallet_ops_for_portfolio['cripto'] == cripto_simbolo]
 
             qtd_comprada = ops_cripto[ops_cripto['tipo_operacao'] == 'Compra']['quantidade'].sum()
@@ -418,17 +424,24 @@ def show_wallet_details():
                     (pd.notna(ops_cripto['lucro_prejuizo_na_op']))
                 ]['lucro_prejuizo_na_op'].sum()
 
+                # Obter o preço atual da criptomoeda
+                current_price = crypto_prices.get(cripto_simbolo.upper(), 0)
+                valor_atual_posicao = quantidade_atual * current_price
+                total_valor_atual_carteira += valor_atual_posicao # Adiciona ao total da carteira
+
                 portfolio_detail[cripto_simbolo] = {
                     'quantidade': float(quantidade_atual), # Garante que é float
                     'custo_total': float(custo_total_atual_estimado), # Garante que é float
                     'custo_medio': float(custo_medio), # Garante que é float
-                    'lucro_realizado': float(lucro_realizado_cripto) # Garante que é float
+                    'lucro_realizado': float(lucro_realizado_cripto), # Garante que é float
+                    'current_price_brl': float(current_price), # Preço atual em BRL
+                    'valor_atual_posicao': float(valor_atual_posicao) # Valor atual da posição
                 }
 
     # Criar DataFrame para o portfólio detalhado
     portfolio_df = pd.DataFrame.from_dict(portfolio_detail, orient='index').reset_index()
     if not portfolio_df.empty:
-        portfolio_df.columns = ['Cripto', 'Quantidade', 'Custo Total', 'Custo Médio', 'Lucro Realizado']
+        portfolio_df.columns = ['Cripto', 'Quantidade', 'Custo Total', 'Custo Médio', 'Lucro Realizado', 'Preço Atual (BRL)', 'Valor Atual da Posição']
         portfolio_df = portfolio_df[portfolio_df['Quantidade'] > 0] # Filtrar só as que tem saldo > 0
 
         # Calcular o Custo Total da Carteira com base no portfolio_df filtrado
@@ -437,11 +450,13 @@ def show_wallet_details():
         total_custo_carteira_atualizado = 0.0
 
     # Exibir as métricas em texto
-    col_custo, col_lucro = st.columns(2)
+    col_custo, col_lucro, col_valor_atual = st.columns(3) # Adicionado mais uma coluna
     with col_custo:
         st.metric(label="Custo Total da Carteira (Ativo)", value=f"R$ {total_custo_carteira_atualizado:,.2f}")
     with col_lucro:
         st.metric(label="Lucro Realizado Total da Carteira", value=f"R$ {total_lucro_realizado:,.2f}")
+    with col_valor_atual: # Nova métrica
+        st.metric(label="Valor Atual da Carteira", value=f"R$ {total_valor_atual_carteira:,.2f}")
 
 
     st.markdown("---")
@@ -450,8 +465,9 @@ def show_wallet_details():
         # Ordenar por 'Custo Total' em ordem decrescente
         portfolio_df = portfolio_df.sort_values(by='Custo Total', ascending=False)
 
-        col_names_portfolio = ["Cripto", "Quantidade", "Custo Total", "Custo Médio", "Lucro Realizado"]
-        cols_ratio_portfolio = [0.15, 0.20, 0.20, 0.20, 0.25]
+        # Adicionando 'Preço Atual (BRL)' e 'Valor Atual da Posição' às colunas
+        col_names_portfolio = ["Cripto", "Quantidade", "Custo Total", "Custo Médio", "Lucro Realizado", "Preço Atual (BRL)", "Valor Atual da Posição"]
+        cols_ratio_portfolio = [0.10, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15] # Ajustando os ratios
 
         cols_portfolio = st.columns(cols_ratio_portfolio)
         for i, col_name in enumerate(col_names_portfolio):
@@ -473,6 +489,10 @@ def show_wallet_details():
             with cols_portfolio[4]:
                 color = "green" if row['Lucro Realizado'] >= 0 else "red"
                 st.markdown(f"<span style='color:{color}'>R$ {row['Lucro Realizado']:.2f}</span>", unsafe_allow_html=True)
+            with cols_portfolio[5]: # Preço Atual (BRL)
+                st.write(f"R$ {row['Preço Atual (BRL)']:.2f}")
+            with cols_portfolio[6]: # Valor Atual da Posição
+                st.write(f"R$ {row['Valor Atual da Posição']:.2f}")
         st.markdown("---")
     else:
         st.info("Sua carteira não possui criptomoedas atualmente (todas as compras foram compensadas por vendas).")
