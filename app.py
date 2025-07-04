@@ -553,7 +553,8 @@ def show_wallet_details():
 
 
     # Define uma função para limpar os campos do formulário
-    def clear_operation_form():
+    # Esta função será chamada APÓS a submissão bem-sucedida do formulário
+    def reset_form_fields():
         st.session_state['quantidade_input'] = 0.00000001
         st.session_state['custo_total_input'] = 0.01
         st.session_state['ptax_input'] = 5.00 # Ou o valor padrão que você preferir
@@ -562,6 +563,7 @@ def show_wallet_details():
         # Não precisa limpar o selectbox, pois ele já é atualizado dinamicamente
 
     # Inicializa os valores do formulário no session_state se não existirem
+    # Isso é importante para que os widgets tenham um valor inicial ao carregar a página
     if 'quantidade_input' not in st.session_state:
         st.session_state['quantidade_input'] = 0.00000001
     if 'custo_total_input' not in st.session_state:
@@ -691,7 +693,7 @@ def show_wallet_details():
 
                 save_operacoes(pd.concat([df_operacoes_existentes, nova_operacao], ignore_index=True))
                 st.success("Operação registrada com sucesso!")
-                clear_operation_form() # Chama a função para limpar o formulário
+                reset_form_fields() # Chama a função para limpar o formulário
                 st.rerun()
 
     st.markdown("---")
@@ -927,7 +929,7 @@ def show_login():
             phone = st.text_input("Telefone")
             email = st.text_input("E‑mail")
             password = st.text_input("Senha", type="password")
-            password_confirm = st.text_input("Confirme a senha", type="password")
+            password_confirm = st.text_input("Confirme a senha", type="type")
             submitted = st.form_submit_button("Cadastrar")
         if submitted:
             if password != password_confirm:
