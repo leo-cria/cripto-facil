@@ -363,58 +363,73 @@ def show_dashboard():
         user_cpf = st.session_state["cpf"]
         user_carteiras_df = df_carteiras[df_carteiras['cpf_usuario'] == user_cpf].copy()
 
-        st.markdown("""
-            <div style='border:2px solid #e0e0e0; border-radius:10px; padding:20px; background-color:#fafafa;'>
-                <h3 style='margin-top:0;'>Criar nova carteira</h3>
-            </div>
-        """, unsafe_allow_html=True)
+        # Formulário de cadastro de nova carteira dentro de um expander
+        with st.expander("➕ Criar nova carteira"):
+            # st.markdown("""
+            #     <div style='border:2px solid #e0e0e0; border-radius:10px; padding:20px; background-color:#fafafa;'>
+            #         <h3 style='margin-top:0;'>Criar nova carteira</h3>
+            #     </div>
+            # """, unsafe_allow_html=True) # Removei o markdown para usar o título do expander
 
-        tipo_selecionado_criar = st.radio(
-            "Tipo de carteira",
-            ["Auto Custódia", "Corretora"],
-            key="tipo_carteira_selection_global_criar",
-            horizontal=True
-        )
+            tipo_selecionado_criar = st.radio(
+                "Tipo de carteira",
+                ["Auto Custódia", "Corretora", "Banco"], # Adicionado "Banco"
+                key="tipo_carteira_selection_global_criar",
+                horizontal=True
+            )
 
-        with st.form("form_add_carteira"):
-            nome_input_criar = ""
-            info1_input_criar = ""
-            info2_input_criar = ""
+            with st.form("form_add_carteira"):
+                nome_input_criar = ""
+                info1_input_criar = ""
+                info2_input_criar = ""
 
-            if tipo_selecionado_criar == "Auto Custódia":
-                nome_input_criar = st.selectbox("Rede", ["ETHEREUM", "SOLANA", "BITCOIN", "BASE"], key="rede_selector_criar")
-                info1_input_criar = st.text_input("Endereço da carteira", key="endereco_field_criar")
-            else: # Corretora
-                nome_input_criar = st.selectbox("Corretora", ["BINANCE", "BYBIT", "COINBASE", "OKX", "MEXC", "MERCADO BITCOIN"], key="corretora_selector_criar")
-                pass
+                if tipo_selecionado_criar == "Auto Custódia":
+                    nome_input_criar = st.selectbox("Rede", ["ETHEREUM", "SOLANA", "BITCOIN", "BASE"], key="rede_selector_criar")
+                    info1_input_criar = st.text_input("Endereço da carteira", key="endereco_field_criar")
+                elif tipo_selecionado_criar == "Corretora":
+                    nome_input_criar = st.selectbox("Corretora", ["BINANCE", "BYBIT", "COINBASE", "OKX", "MEXC", "MERCADO BITCOIN"], key="corretora_selector_criar")
+                    pass
+                elif tipo_selecionado_criar == "Banco": # NOVO: Campos para tipo "Banco"
+                    nome_input_criar = st.selectbox("Banco", ["NUBANK", "ITAU", "MERCADO PAGO"], key="banco_selector_criar")
+                    # info1 e info2 podem ser usados para agência/conta se necessário, por enquanto vazios
+                    pass
 
-            nacional_input_criar = st.radio("Origem da carteira:", ["Nacional", "Estrangeira"], key="nacionalidade_radio_field_criar")
+                nacional_input_criar = st.radio("Origem da carteira:", ["Nacional", "Estrangeira"], key="nacionalidade_radio_field_criar")
 
-            enviado_criar = st.form_submit_button("Criar carteira ➕")
-            if enviado_criar:
-                if tipo_selecionado_criar == "Auto Custódia" and (not nome_input_criar or not info1_input_criar):
-                    st.error("Por favor, preencha todos os campos obrigatórios para Auto Custódia.")
-                elif tipo_selecionado_criar == "Corretora" and not nome_input_criar:
-                    st.error("Por favor, selecione uma corretora.")
-                else:
-                    nova_carteira = pd.DataFrame([{
-                        "id": f"carteira_{uuid.uuid4()}",
-                        "tipo": tipo_selecionado_criar,
-                        "nome": nome_input_criar,
-                        "nacional": nacional_input_criar,
-                        "info1": info1_input_criar,
-                        "info2": info2_input_criar,
-                        "cpf_usuario": user_cpf
-                    }])
-                    current_carteiras_df = load_carteiras()
-                    save_carteiras(pd.concat([current_carteiras_df, nova_carteira], ignore_index=True))
-                    st.success("Carteira criada com sucesso!")
-                    st.rerun()
+                enviado_criar = st.form_submit_button("Criar carteira ➕")
+                if enviado_criar:
+                    if tipo_selecionado_criar == "Auto Custódia" and (not nome_input_criar or not info1_input_criar):
+                        st.error("Por favor, preencha todos os campos obrigatórios para Auto Custódia.")
+                    elif (tipo_selecionado_criar == "Corretora" or tipo_selecionado_criar == "Banco") and not nome_input_criar:
+                        st.error(f"Por favor, selecione uma {tipo_selecionado_criar.lower()}.")
+                    else:
+                        nova_carteira = pd.DataFrame([{
+                            "id": f"carteira_{uuid.uuid4()}",
+                            "tipo": tipo_selecionado_criar,
+                            "nome": nome_input_criar,
+                            "nacional": nacional_input_criar,
+                            "info1": info1_input_criar,
+                            "info2": info2_input_criar,
+                            "cpf_usuario": user_cpf
+                        }])
+                        current_carteiras_df = load_carteiras()
+                        save_carteiras(pd.concat([current_carteiras_df, nova_carteira], ignore_index=True))
+                        st.success("Carteira criada com sucesso!")
+                        st.rerun()
 
         st.subheader("Minhas carteiras")
         if not user_carteiras_df.empty:
             for _, row in user_carteiras_df.iterrows():
-                with st.expander(f"🔗 {row['nome']} ({row['tipo']}) - Origem: {row['nacional']}", expanded=False):
+                # Adaptação para exibir informações da carteira de forma dinâmica
+                display_info = ""
+                if row['tipo'] == 'Auto Custódia' and str(row['info1']).strip().lower() != 'nan' and str(row['info1']).strip() != '':
+                    display_info = f" - Endereço: {row['info1']}"
+                elif row['tipo'] == 'Corretora':
+                    display_info = "" # Corretores já tem o nome como principal
+                elif row['tipo'] == 'Banco':
+                    display_info = "" # Bancos já tem o nome como principal
+                
+                with st.expander(f"🔗 {row['nome']} ({row['tipo']}){display_info} - Origem: {row['nacional']}", expanded=False):
                     st.write(f"**Tipo:** {row['tipo']}")
                     st.write(f"**Origem:** {row['nacional']}")
 
@@ -425,6 +440,7 @@ def show_dashboard():
                             st.write(f"**API Key (Antiga):** {row['info1']}")
                         if str(row['info2']).strip().lower() != 'nan' and str(row['info2']).strip() != '':
                             st.write(f"**Secret Key (Antiga):** {row['info2']}")
+                    # Para 'Banco', não há info1/info2 específicas para exibir por padrão
 
                     col_access, col_delete = st.columns(2)
 
@@ -516,6 +532,7 @@ def show_wallet_details():
             st.write(f"**API Key (Antiga):** {current_wallet['info1']}")
         if str(current_wallet['info2']).strip().lower() != 'nan' and str(current_wallet['info2']).strip() != '':
             st.write(f"**Secret Key (Antiga):** {current_wallet['info2']}")
+    # Para o tipo "Banco", não há info1/info2 a serem exibidas por padrão aqui.
 
     st.markdown("---")
 
@@ -712,8 +729,8 @@ def show_wallet_details():
 
     st.markdown("---")
 
-    # --- NOVO: Seção de cadastro de nova operação dentro de um expander ---
-    with st.expander("➕ Cadastrar Nova Operação", expanded=True):
+    # --- Seção de cadastro de nova operação dentro de um expander (INICIA FECHADO) ---
+    with st.expander("➕ Cadastrar Nova Operação", expanded=False): # MODIFICADO AQUI
         if 'current_tipo_operacao' not in st.session_state:
             st.session_state['current_tipo_operacao'] = "Compra"
 
