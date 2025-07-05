@@ -1081,7 +1081,8 @@ def show_wallet_details():
                 with col_edit_submit:
                     edited_submitted = st.form_submit_button("Confirmar Edição ✅", key=f"submit_edit_op_{op_to_edit_id}")
                 with col_edit_cancel:
-                    cancel_edited = st.form_submit_button("Cancelar Edição", key=f"cancel_edit_op_{op_to_edit_id}")
+                    # ALTERAÇÃO AQUI: Troca de st.form_submit_button para st.button
+                    cancel_edited = st.button("Cancelar Edição", key=f"cancel_edit_op_{op_to_edit_id}")
 
                 if edited_submitted:
                     if not edited_selected_crypto_data:
