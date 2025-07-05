@@ -449,13 +449,14 @@ def show_dashboard():
         if st.session_state.get('confirm_delete_wallet_id'):
             with wallet_confirm_placeholder.container():
                 wallet_to_confirm_delete_id = st.session_state['confirm_delete_wallet_id']
-                wallet_name = df_carteiras[df_carteiras['id'] == wallet_to_confirm_delete_id]['nome'].iloc[0]
+                wallet_name = user_carteiras_df[user_carteiras_df['id'] == wallet_to_confirm_delete_id]['nome'].iloc[0]
 
                 st.markdown(f"""
                 <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-top:20px;">
                     <h4 style="color:#ff0000; margin-top:0;'>⚠️ Confirmar Exclusão de Carteira</h4>
-                    <p>Tem certeza que deseja excluir a carteira <strong>"{wallet_name}"</strong>?</p>
-                    <p style="color:#ff0000; font-weight:bold;">Isso também excluirá TODAS as operações associadas a ela!</p>
+                    <p>Você tem certeza que deseja excluir a carteira <strong>"{wallet_name}"</strong>?</p>
+                    <p style="color:#ff0000; font-weight:bold;">Esta ação é irreversível e também excluirá TODAS as operações vinculadas a esta carteira!</p>
+                    <p>Deseja realmente continuar?</p>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -711,226 +712,226 @@ def show_wallet_details():
 
     st.markdown("---")
 
-    st.markdown("#### Cadastrar Nova Operação")
+    # --- NOVO: Seção de cadastro de nova operação dentro de um expander ---
+    with st.expander("➕ Cadastrar Nova Operação", expanded=True):
+        if 'current_tipo_operacao' not in st.session_state:
+            st.session_state['current_tipo_operacao'] = "Compra"
 
-    if 'current_tipo_operacao' not in st.session_state:
-        st.session_state['current_tipo_operacao'] = "Compra"
+        tipo_operacao_display = st.radio(
+            "Tipo de Operação",
+            ["Compra", "Venda"],
+            horizontal=True,
+            key="tipo_op_radio_external",
+            index=["Compra", "Venda"].index(st.session_state['current_tipo_operacao'])
+        )
+        st.session_state['current_tipo_operacao'] = tipo_operacao_display # Garante que o estado é atualizado
 
-    tipo_operacao_display = st.radio(
-        "Tipo de Operação",
-        ["Compra", "Venda"],
-        horizontal=True,
-        key="tipo_op_radio_external",
-        index=["Compra", "Venda"].index(st.session_state['current_tipo_operacao'])
-    )
-    st.session_state['current_tipo_operacao'] = tipo_operacao_display # Garante que o estado é atualizado
+        # Carrega a lista de dicionários de criptomoedas
+        _, cryptocurrencies_data_df = load_cryptocurrencies_from_file()
+        
+        # Cria uma lista de strings para exibição no selectbox (apenas o display_name)
+        display_options = cryptocurrencies_data_df['display_name'].tolist()
+        
+        # Mapeia o display_name para o objeto completo da criptomoeda para fácil recuperação
+        display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data_df.to_dict('records')}
 
-    # Carrega a lista de dicionários de criptomoedas
-    _, cryptocurrencies_data_df = load_cryptocurrencies_from_file()
-    
-    # Cria uma lista de strings para exibição no selectbox (apenas o display_name)
-    display_options = cryptocurrencies_data_df['display_name'].tolist()
-    
-    # Mapeia o display_name para o objeto completo da criptomoeda para fácil recuperação
-    display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data_df.to_dict('records')}
+        # Inicializa o estado para a opção selecionada no selectbox
+        # Garante que a opção selecionada esteja sempre na lista de opções válidas
+        if 'selected_crypto_display_name' not in st.session_state or st.session_state['selected_crypto_display_name'] not in display_options:
+            st.session_state['selected_crypto_display_name'] = display_options[0] if display_options else None
+        
+        # Callback para o selectbox
+        def handle_crypto_select_change(): # Removido 'selected_value' como argumento
+            st.session_state['selected_crypto_display_name'] = st.session_state.cripto_select_outside_form
 
-    # Inicializa o estado para a opção selecionada no selectbox
-    # Garante que a opção selecionada esteja sempre na lista de opções válidas
-    if 'selected_crypto_display_name' not in st.session_state or st.session_state['selected_crypto_display_name'] not in display_options:
-        st.session_state['selected_crypto_display_name'] = display_options[0] if display_options else None
-    
-    # Callback para o selectbox
-    def handle_crypto_select_change(): # Removido 'selected_value' como argumento
-        st.session_state['selected_crypto_display_name'] = st.session_state.cripto_select_outside_form
-
-    # O selectbox exibirá as strings de display_name
-    selected_display_name = st.selectbox(
-        "Criptomoeda", 
-        options=display_options, # Usa apenas as opções da API
-        key="cripto_select_outside_form",
-        help="Selecione a criptomoeda para a operação.",
-        index=display_options.index(st.session_state['selected_crypto_display_name']) if st.session_state['selected_crypto_display_name'] in display_options else 0,
-        on_change=handle_crypto_select_change # Removido 'args'
-    )
-
-    cripto_symbol = ""
-    selected_crypto_for_display = None
-    
-    # --- Lógica simplificada para obter a cripto selecionada ---
-    if selected_display_name:
-        selected_crypto_for_display = display_name_to_crypto_map.get(selected_display_name)
-        if selected_crypto_for_display:
-            cripto_symbol = selected_crypto_for_display['symbol']
-        else:
-            # Fallback se por algum motivo a cripto não for encontrada no mapa (improvável com a nova lógica)
-            cripto_symbol = ""
-            st.error("Criptomoeda selecionada não encontrada na lista de dados.")
-
-    # Exibe a logo e o nome completo da criptomoeda selecionada
-    if selected_crypto_for_display:
-        # Verifica se a imagem da API é válida ou se é o emoji padrão
-        if selected_crypto_for_display['image'] and selected_crypto_for_display['image'] != "🪙":
-            st.markdown(
-                f"<img src='{selected_crypto_for_display['image']}' width='30' height='30' style='vertical-align:middle; margin-right:10px;'> "
-                f"**{selected_crypto_for_display['symbol']}** - {selected_crypto_for_display['name']}", 
-                unsafe_allow_html=True
-            )
-        else: # Se a imagem for o emoji padrão ou vazia
-            st.markdown(
-                f"🪙 **{selected_crypto_for_display['symbol']}** - {selected_crypto_for_display['name']}",
-                unsafe_allow_html=True
-            )
-    else:
-        st.markdown("<p style='color:orange;'>Selecione uma criptomoeda para ver os detalhes.</p>", unsafe_allow_html=True)
-
-
-    # Inicializa os valores do formulário no session_state se não existirem
-    if 'quantidade_input_value' not in st.session_state:
-        st.session_state['quantidade_input_value'] = 0.00000001
-    if 'custo_total_input_value' not in st.session_state:
-        st.session_state['custo_total_input_value'] = 0.01
-    if 'ptax_input_value' not in st.session_state:
-        st.session_state['ptax_input_value'] = 5.00
-    if 'data_op_input_value' not in st.session_state:
-        st.session_state['data_op_input_value'] = datetime.today().date()
-    if 'hora_op_input_value' not in st.session_state:
-        st.session_state['hora_op_input_value'] = datetime.now().time()
-
-    with st.form("form_nova_operacao"):
-        current_op_type = st.session_state['current_tipo_operacao']
-
-        # Campos do formulário usando as chaves do session_state para seus valores
-        quantidade = st.number_input(
-            "Quantidade", 
-            min_value=0.00000001, 
-            format="%.8f", 
-            key="quantidade_input_form", # Chave específica para o widget dentro do form
-            value=st.session_state['quantidade_input_value']
+        # O selectbox exibirá as strings de display_name
+        selected_display_name = st.selectbox(
+            "Criptomoeda", 
+            options=display_options, # Usa apenas as opções da API
+            key="cripto_select_outside_form",
+            help="Selecione a criptomoeda para a operação.",
+            index=display_options.index(st.session_state['selected_crypto_display_name']) if st.session_state['selected_crypto_display_name'] in display_options else 0,
+            on_change=handle_crypto_select_change # Removido 'args'
         )
 
-        valor_label_base = ""
-        if is_foreign_wallet:
-            valor_label_base = "Custo Total (em USDT)" if current_op_type == "Compra" else "Total da Venda (em USDT)"
-        else:
-            valor_label_base = "Custo Total (em BRL)" if current_op_type == "Compra" else "Total da Venda (em BRL)"
-
-        custo_total_input = st.number_input(
-            valor_label_base, 
-            min_value=0.01, 
-            format="%.2f", 
-            key="custo_total_input_form", # Chave específica para o widget dentro do form
-            value=st.session_state['custo_total_input_value']
-        )
-
-        ptax_input = 1.0 # Default para carteiras nacionais, ou se não for informada
-        valor_em_brl_preview = 0.0
-
-        if is_foreign_wallet:
-            ptax_input = st.number_input(
-                "Taxa PTAX (BRL por USDT)",
-                min_value=0.01,
-                format="%.4f",
-                key="ptax_input_form", # Chave específica para o widget dentro do form
-                value=st.session_state['ptax_input_value']
-            )
-            valor_em_brl_preview = custo_total_input * ptax_input 
-        else:
-            valor_em_brl_preview = custo_total_input
-
-
-        data_operacao = st.date_input(
-            "Data da Operação", 
-            key="data_op_input_form", # Chave específica para o widget dentro do form
-            value=st.session_state['data_op_input_value'],
-            min_value=date(2000, 1, 1), # Ano mínimo
-            max_value=date(2100, 12, 31), # Ano máximo
-            format="DD/MM/YYYY" # Formato de exibição
-        )
-        hora_operacao = st.time_input(
-            "Hora da Operação", 
-            key="hora_op_input_form", # Chave específica para o widget dentro do form
-            value=st.session_state['hora_op_input_value']
-        )
-
-        submitted_op = st.form_submit_button("Registrar Operação ✅")
-
-        if submitted_op:
-            # Validação para garantir que uma criptomoeda foi selecionada
-            if not selected_crypto_for_display:
-                st.error("Por favor, selecione uma criptomoeda.")
-            elif quantidade <= 0 or custo_total_input <= 0:
-                st.error("Por favor, preencha todos os campos da operação corretamente.")
-            elif is_foreign_wallet and ptax_input <= 0:
-                st.error("Por favor, informe uma taxa PTAX válida para carteiras estrangeiras.")
+        cripto_symbol = ""
+        selected_crypto_for_display = None
+        
+        # --- Lógica simplificada para obter a cripto selecionada ---
+        if selected_display_name:
+            selected_crypto_for_display = display_name_to_crypto_map.get(selected_display_name)
+            if selected_crypto_for_display:
+                cripto_symbol = selected_crypto_for_display['symbol']
             else:
-                data_hora_completa = datetime.combine(data_operacao, hora_operacao)
+                # Fallback se por algum motivo a cripto não for encontrada no mapa (improvável com a nova lógica)
+                cripto_symbol = ""
+                st.error("Criptomoeda selecionada não encontrada na lista de dados.")
 
-                df_operacoes_existentes = load_operacoes()
-
-                preco_medio_compra_na_op = float('nan')
-                lucro_prejuizo_na_op = float('nan')
-
-                # O custo_total que será salvo é sempre em BRL
-                custo_total_final_brl = valor_em_brl_preview
-
-                if current_op_type == "Compra":
-                    if quantidade > 0:
-                        preco_medio_compra_na_op = custo_total_final_brl / quantidade
-                    else:
-                        preco_medio_compra_na_op = float('nan') # Evita divisão por zero
-                elif current_op_type == "Venda":
-                    compras_anteriores = df_operacoes_existentes[
-                        (df_operacoes_existentes['wallet_id'] == wallet_id) &
-                        (df_operacoes_existentes['cpf_usuario'] == user_cpf) &
-                        (df_operacoes_existentes['tipo_operacao'] == 'Compra') &
-                        (df_operacoes_existentes['cripto'] == cripto_symbol) & # Usar o símbolo aqui
-                        (df_operacoes_existentes['data_operacao'] <= data_hora_completa)
-                    ]
-
-                    if not compras_anteriores.empty and compras_anteriores['quantidade'].sum() > 0:
-                        total_custo_compras = compras_anteriores['custo_total'].sum()
-                        total_quantidade_compras = compras_anteriores['quantidade'].sum()
-
-                        preco_medio_compra_na_op = total_custo_compras / total_quantidade_compras
-
-                        custo_base_da_venda = quantidade * preco_medio_compra_na_op
-                        lucro_prejuizo_na_op = custo_total_final_brl - custo_base_da_venda
-                    else:
-                        preco_medio_compra_na_op = float('nan')
-                        lucro_prejuizo_na_op = float('nan')
-                        st.warning("Não há operações de compra anteriores para calcular o preço médio para esta venda.")
+        # Exibe a logo e o nome completo da criptomoeda selecionada
+        if selected_crypto_for_display:
+            # Verifica se a imagem da API é válida ou se é o emoji padrão
+            if selected_crypto_for_display['image'] and selected_crypto_for_display['image'] != "🪙":
+                st.markdown(
+                    f"<img src='{selected_crypto_for_display['image']}' width='30' height='30' style='vertical-align:middle; margin-right:10px;'> "
+                    f"**{selected_crypto_for_display['symbol']}** - {selected_crypto_for_display['name']}", 
+                    unsafe_allow_html=True
+                )
+            else: # Se a imagem for o emoji padrão ou vazia
+                st.markdown(
+                    f"🪙 **{selected_crypto_for_display['symbol']}** - {selected_crypto_for_display['name']}",
+                    unsafe_allow_html=True
+                )
+        else:
+            st.markdown("<p style='color:orange;'>Selecione uma criptomoeda para ver os detalhes.</p>", unsafe_allow_html=True)
 
 
-                nova_operacao = pd.DataFrame([{
-                    "id": f"operacao_{uuid.uuid4()}",
-                    "wallet_id": wallet_id,
-                    "cpf_usuario": user_cpf,
-                    "tipo_operacao": current_op_type,
-                    "cripto": str(cripto_symbol), # Salva o símbolo (ex: BTC, SOL, MEUCUSTOM)
-                    "cripto_display_name": selected_crypto_for_display['display_name'], # NOVO: Salva o nome de exibição completo
-                    "cripto_image_url": selected_crypto_for_display['image'], # NOVO: Salva a URL da imagem ou emoji
-                    "quantidade": float(quantidade), # Garante que a quantidade é salva como float
-                    "custo_total": custo_total_final_brl, # Salva o valor já convertido para BRL
-                    "data_operacao": data_hora_completa,
-                    "preco_medio_compra_na_op": preco_medio_compra_na_op,
-                    "lucro_prejuizo_na_op": lucro_prejuizo_na_op,
-                    "ptax_na_op": ptax_input # Salva a PTAX utilizada
-                }])
+        # Inicializa os valores do formulário no session_state se não existirem
+        if 'quantidade_input_value' not in st.session_state:
+            st.session_state['quantidade_input_value'] = 0.00000001
+        if 'custo_total_input_value' not in st.session_state:
+            st.session_state['custo_total_input_value'] = 0.01
+        if 'ptax_input_value' not in st.session_state:
+            st.session_state['ptax_input_value'] = 5.00
+        if 'data_op_input_value' not in st.session_state:
+            st.session_state['data_op_input_value'] = datetime.today().date()
+        if 'hora_op_input_value' not in st.session_state:
+            st.session_state['hora_op_input_value'] = datetime.now().time()
 
-                save_operacoes(pd.concat([df_operacoes_existentes, nova_operacao], ignore_index=True))
-                st.success("Operação registrada com sucesso!")
-                
-                # Limpa os campos do formulário redefinindo os valores no session_state
-                st.session_state['quantidade_input_value'] = 0.00000001
-                st.session_state['custo_total_input_value'] = 0.01
-                st.session_state['ptax_input_value'] = 5.00 
-                st.session_state['data_op_input_value'] = datetime.today().date()
-                st.session_state['hora_op_input_value'] = datetime.now().time()
-                
-                # Resetar a seleção de cripto para a primeira opção da lista após o registro
-                st.session_state['selected_crypto_display_name'] = display_options[0] if display_options else None
-                
-                st.rerun()
+        with st.form("form_nova_operacao"):
+            current_op_type = st.session_state['current_tipo_operacao']
+
+            # Campos do formulário usando as chaves do session_state para seus valores
+            quantidade = st.number_input(
+                "Quantidade", 
+                min_value=0.00000001, 
+                format="%.8f", 
+                key="quantidade_input_form", # Chave específica para o widget dentro do form
+                value=st.session_state['quantidade_input_value']
+            )
+
+            valor_label_base = ""
+            if is_foreign_wallet:
+                valor_label_base = "Custo Total (em USDT)" if current_op_type == "Compra" else "Total da Venda (em USDT)"
+            else:
+                valor_label_base = "Custo Total (em BRL)" if current_op_type == "Compra" else "Total da Venda (em BRL)"
+
+            custo_total_input = st.number_input(
+                valor_label_base, 
+                min_value=0.01, 
+                format="%.2f", 
+                key="custo_total_input_form", # Chave específica para o widget dentro do form
+                value=st.session_state['custo_total_input_value']
+            )
+
+            ptax_input = 1.0 # Default para carteiras nacionais, ou se não for informada
+            valor_em_brl_preview = 0.0
+
+            if is_foreign_wallet:
+                ptax_input = st.number_input(
+                    "Taxa PTAX (BRL por USDT)",
+                    min_value=0.01,
+                    format="%.4f",
+                    key="ptax_input_form", # Chave específica para o widget dentro do form
+                    value=st.session_state['ptax_input_value']
+                )
+                valor_em_brl_preview = custo_total_input * ptax_input 
+            else:
+                valor_em_brl_preview = custo_total_input
+
+
+            data_operacao = st.date_input(
+                "Data da Operação", 
+                key="data_op_input_form", # Chave específica para o widget dentro do form
+                value=st.session_state['data_op_input_value'],
+                min_value=date(2000, 1, 1), # Ano mínimo
+                max_value=date(2100, 12, 31), # Ano máximo
+                format="DD/MM/YYYY" # Formato de exibição
+            )
+            hora_operacao = st.time_input(
+                "Hora da Operação", 
+                key="hora_op_input_form", # Chave específica para o widget dentro do form
+                value=st.session_state['hora_op_input_value']
+            )
+
+            submitted_op = st.form_submit_button("Registrar Operação ✅")
+
+            if submitted_op:
+                # Validação para garantir que uma criptomoeda foi selecionada
+                if not selected_crypto_for_display:
+                    st.error("Por favor, selecione uma criptomoeda.")
+                elif quantidade <= 0 or custo_total_input <= 0:
+                    st.error("Por favor, preencha todos os campos da operação corretamente.")
+                elif is_foreign_wallet and ptax_input <= 0:
+                    st.error("Por favor, informe uma taxa PTAX válida para carteiras estrangeiras.")
+                else:
+                    data_hora_completa = datetime.combine(data_operacao, hora_operacao)
+
+                    df_operacoes_existentes = load_operacoes()
+
+                    preco_medio_compra_na_op = float('nan')
+                    lucro_prejuizo_na_op = float('nan')
+
+                    # O custo_total que será salvo é sempre em BRL
+                    custo_total_final_brl = valor_em_brl_preview
+
+                    if current_op_type == "Compra":
+                        if quantidade > 0:
+                            preco_medio_compra_na_op = custo_total_final_brl / quantidade
+                        else:
+                            preco_medio_compra_na_op = float('nan') # Evita divisão por zero
+                    elif current_op_type == "Venda":
+                        compras_anteriores = df_operacoes_existentes[
+                            (df_operacoes_existentes['wallet_id'] == wallet_id) &
+                            (df_operacoes_existentes['cpf_usuario'] == user_cpf) &
+                            (df_operacoes_existentes['tipo_operacao'] == 'Compra') &
+                            (df_operacoes_existentes['cripto'] == cripto_symbol) & # Usar o símbolo aqui
+                            (df_operacoes_existentes['data_operacao'] <= data_hora_completa)
+                        ]
+
+                        if not compras_anteriores.empty and compras_anteriores['quantidade'].sum() > 0:
+                            total_custo_compras = compras_anteriores['custo_total'].sum()
+                            total_quantidade_compras = compras_anteriores['quantidade'].sum()
+
+                            preco_medio_compra_na_op = total_custo_compras / total_quantidade_compras
+
+                            custo_base_da_venda = quantidade * preco_medio_compra_na_op
+                            lucro_prejuizo_na_op = custo_total_final_brl - custo_base_da_venda
+                        else:
+                            preco_medio_compra_na_op = float('nan')
+                            lucro_prejuizo_na_op = float('nan')
+                            st.warning("Não há operações de compra anteriores para calcular o preço médio para esta venda.")
+
+
+                    nova_operacao = pd.DataFrame([{
+                        "id": f"operacao_{uuid.uuid4()}",
+                        "wallet_id": wallet_id,
+                        "cpf_usuario": user_cpf,
+                        "tipo_operacao": current_op_type,
+                        "cripto": str(cripto_symbol), # Salva o símbolo (ex: BTC, SOL, MEUCUSTOM)
+                        "cripto_display_name": selected_crypto_for_display['display_name'], # NOVO: Salva o nome de exibição completo
+                        "cripto_image_url": selected_crypto_for_display['image'], # NOVO: Salva a URL da imagem ou emoji
+                        "quantidade": float(quantidade), # Garante que a quantidade é salva como float
+                        "custo_total": custo_total_final_brl, # Salva o valor já convertido para BRL
+                        "data_operacao": data_hora_completa,
+                        "preco_medio_compra_na_op": preco_medio_compra_na_op,
+                        "lucro_prejuizo_na_op": lucro_prejuizo_na_op,
+                        "ptax_na_op": ptax_input # Salva a PTAX utilizada
+                    }])
+
+                    save_operacoes(pd.concat([df_operacoes_existentes, nova_operacao], ignore_index=True))
+                    st.success("Operação registrada com sucesso!")
+                    
+                    # Limpa os campos do formulário redefinindo os valores no session_state
+                    st.session_state['quantidade_input_value'] = 0.00000001
+                    st.session_state['custo_total_input_value'] = 0.01
+                    st.session_state['ptax_input_value'] = 5.00 
+                    st.session_state['data_op_input_value'] = datetime.today().date()
+                    st.session_state['hora_op_input_value'] = datetime.now().time()
+                    
+                    # Resetar a seleção de cripto para a primeira opção da lista após o registro
+                    st.session_state['selected_crypto_display_name'] = display_options[0] if display_options else None
+                    
+                    st.rerun()
 
     st.markdown("---")
     st.markdown("#### Histórico de Operações Desta Carteira")
@@ -951,7 +952,10 @@ def show_wallet_details():
                 st.markdown(f"""
                 <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-bottom:20px;">
                     <h4 style="color:#ff0000; margin-top:0;'>⚠️ Confirmar Exclusão de Operação</h4>
-                    <p>Tem certeza que deseja excluir a operação:<br> <strong>"{op_info_display}"</strong>?</p>
+                    <p>Você tem certeza que deseja excluir a seguinte operação?</p>
+                    <p style="font-weight:bold;">{op_info_display}</p>
+                    <p style="color:#ff0000; font-weight:bold;">Esta ação é irreversível e não poderá ser desfeita.</p>
+                    <p>Deseja realmente continuar?</p>
                 </div>
                 """, unsafe_allow_html=True)
 
