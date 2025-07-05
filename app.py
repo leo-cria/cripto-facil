@@ -115,7 +115,7 @@ def load_operacoes():
             # Para dados antigos, usa o emoji de moeda como padrão
             df['cripto_image_url'] = "🪙"
         else:
-            df['cripto_image_url'] = df['cripto_image_url'].astype(str).replace('nan', '�')
+            df['cripto_image_url'] = df['cripto_image_url'].astype(str).replace('nan', '🪙')
 
 
         return df
@@ -334,7 +334,7 @@ def show_dashboard():
         st.subheader("Minhas carteiras")
         if not user_carteiras_df.empty:
             for _, row in user_carteiras_df.iterrows():
-                with st.expander(f"🔗 {row['nome']} ({row['tipo']}) - Origem: {row['nacional']}", expanded=False):
+                with st.expander(f"� {row['nome']} ({row['tipo']}) - Origem: {row['nacional']}", expanded=False):
                     st.write(f"**Tipo:** {row['tipo']}")
                     st.write(f"**Origem:** {row['nacional']}")
 
@@ -535,8 +535,18 @@ def show_wallet_details():
     # Criar DataFrame para o portfólio detalhado
     portfolio_df = pd.DataFrame.from_dict(portfolio_detail, orient='index').reset_index()
     if not portfolio_df.empty:
-        # Renomeia a coluna 'index' para 'Cripto' e 'display_name' para 'Cripto_Display'
-        portfolio_df.rename(columns={'index': 'Cripto_Symbol', 'display_name': 'Cripto'}, inplace=True)
+        # --- CORREÇÃO: Atribuição explícita de nomes de colunas para garantir a capitalização correta ---
+        portfolio_df.columns = [
+            'Cripto_Symbol',         # O símbolo original da cripto (do índice)
+            'Cripto',                # O display_name da cripto
+            'Imagem',                # A URL da imagem ou emoji
+            'Quantidade',            # A quantidade atual
+            'Custo Total',           # O custo total
+            'Custo Médio',           # O custo médio
+            'Lucro Realizado',       # O lucro realizado
+            'Preço Atual (BRL)',     # O preço atual em BRL
+            'Valor Atual da Posição' # O valor atual da posição
+        ]
         
         portfolio_df = portfolio_df[portfolio_df['Quantidade'] > 0] # Filtrar só as que tem saldo > 0
 
