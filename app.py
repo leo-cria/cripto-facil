@@ -862,7 +862,7 @@ def show_wallet_details():
             with cols[4]: # Valor Total (USDT)
                 if is_foreign_wallet and pd.notna(op_row['custo_total_usdt']):
                     # Formatar Valor Total (USDT) com 2 casas decimais
-                    st.write(f'USDT {format_number_br(op_row["custo_total_usdt'], decimals=2)}')
+                    st.write("f'USDT {format_number_br(op_row["custo_total_usdt'], decimals=2)}")
                 else:
                     st.write("-")
             with cols[5]: # Valor Total (BRL)
