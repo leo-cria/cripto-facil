@@ -155,7 +155,8 @@ def load_cryptocurrencies_from_file():
                 # Certifica-se de que 'current_price_brl' é float
                 df_cryptos = pd.DataFrame(cryptos)
                 if 'current_price_brl' in df_cryptos.columns:
-                    df_cryptos['current_price_brl'] = pd.to_numeric(df_cryptos['current_price_brl'], errors='coerce')
+                    # CORREÇÃO: Preenche NaN com 0.0 para garantir que o preço seja numérico
+                    df_cryptos['current_price_brl'] = pd.to_numeric(df_cryptos['current_price_brl'], errors='coerce').fillna(0.0)
                 
                 return last_updated, df_cryptos
         except json.JSONDecodeError:
@@ -171,7 +172,7 @@ def get_current_crypto_price(crypto_symbol, df_cryptos_prices):
     """
     price_row = df_cryptos_prices[df_cryptos_prices['symbol'] == crypto_symbol]
     if not price_row.empty:
-        # Pega o primeiro preço encontrado para o símbolo
+        # Pega o primeiro preço encontrado para o símbolo, já garantido como numérico (float ou 0.0)
         return price_row['current_price_brl'].iloc[0]
     return 0.0 # Retorna 0.0 se não encontrar o preço
 
@@ -501,7 +502,7 @@ def show_wallet_details():
                 ]['lucro_prejuizo_na_op'].sum()
 
                 # Obter o preço atual da criptomoeda
-                current_price = crypto_prices.get(cripto_simbolo.upper(), 0)
+                current_price = crypto_prices.get(cripto_simbolo.upper(), 0.0) # Garante que é float
                 valor_atual_posicao = quantidade_atual * current_price
                 total_valor_atual_carteira += valor_atual_posicao # Adiciona ao total da carteira
 
@@ -529,7 +530,7 @@ def show_wallet_details():
         portfolio_df = portfolio_df.reset_index().rename(columns={
             'index': 'Cripto_Symbol',         # O símbolo original da cripto (do índice)
             'display_name': 'Cripto',         # O display_name da cripto
-            'image': 'Imagem',                # A URL da imagem ou emoji
+            'image': 'Logo',                # A URL da imagem ou emoji (RENOMEADO)
             'quantidade': 'Quantidade',       # A quantidade atual
             'custo_total': 'Custo Total',     # O custo total
             'custo_medio': 'Custo Médio',     # O custo médio
@@ -591,7 +592,7 @@ def show_wallet_details():
         portfolio_df = portfolio_df.sort_values(by='POSIÇÃO', ascending=False)
 
         # Definindo as colunas e seus respectivos ratios (REMOVIDAS: Custo Médio e Preço Atual (BRL))
-        col_names_portfolio = ["Imagem", "Cripto", "Quantidade", "Custo Total", "Lucro Realizado", "Valor Atual da Posição", "POSIÇÃO"]
+        col_names_portfolio = ["Logo", "Cripto", "Quantidade", "Custo Total", "Lucro Realizado", "Valor Atual da Posição", "POSIÇÃO"] # RENOMEADO AQUI
         cols_ratio_portfolio = [0.07, 0.15, 0.15, 0.15, 0.15, 0.18, 0.15] # Ajustado para 7 colunas
 
         cols_portfolio = st.columns(cols_ratio_portfolio)
@@ -602,11 +603,11 @@ def show_wallet_details():
 
         for idx, row in portfolio_df.iterrows():
             cols_portfolio = st.columns(cols_ratio_portfolio)
-            with cols_portfolio[0]: # Coluna Imagem
-                if row['Imagem'] == "🪙": # Se for o emoji, exibe o emoji
+            with cols_portfolio[0]: # Coluna Logo
+                if row['Logo'] == "🪙": # Se for o emoji, exibe o emoji
                     st.markdown("🪙", unsafe_allow_html=True)
-                elif row['Imagem']:
-                    st.markdown(f"<img src='{row['Imagem']}' width='24' height='24'>", unsafe_allow_html=True)
+                elif row['Logo']:
+                    st.markdown(f"<img src='{row['Logo']}' width='24' height='24'>", unsafe_allow_html=True)
                 else:
                     st.write("➖")
             with cols_portfolio[1]: # Coluna Cripto
@@ -659,8 +660,8 @@ def show_wallet_details():
         st.session_state['selected_crypto_display_name'] = display_options[0] if display_options else None
     
     # Callback para o selectbox
-    def handle_crypto_select_change(selected_value): # CORREÇÃO AQUI: Recebe o valor selecionado
-        st.session_state['selected_crypto_display_name'] = selected_value
+    def handle_crypto_select_change(): # Removido 'selected_value' como argumento
+        st.session_state['selected_crypto_display_name'] = st.session_state.cripto_select_outside_form
 
     # O selectbox exibirá as strings de display_name
     selected_display_name = st.selectbox(
@@ -669,8 +670,7 @@ def show_wallet_details():
         key="cripto_select_outside_form",
         help="Selecione a criptomoeda para a operação.",
         index=display_options.index(st.session_state['selected_crypto_display_name']) if st.session_state['selected_crypto_display_name'] in display_options else 0,
-        on_change=handle_crypto_select_change, # Adiciona o callback aqui
-        args=(st.session_state.cripto_select_outside_form,) # Passa o valor do widget para o callback
+        on_change=handle_crypto_select_change # Removido 'args'
     )
 
     cripto_symbol = ""
@@ -971,7 +971,7 @@ def show_wallet_details():
             "P. Médio Venda", "Lucro/Prejuízo", "Data/Hora", "Origem", "Ações"
         ]
         # Ajustando os ratios das colunas para caber na tela, 'Origem' aumentada
-        cols_ratio = [0.05, 0.04, 0.10, 0.08, 0.06, 0.09, 0.09, 0.09, 0.09, 0.09, 0.08, 0.07, 0.07] 
+        cols_ratio = [0.05, 0.04, 0.10, 0.08, 0.06, 0.09, 0.09, 0.09, 0.09, 0.09, 0.08, 0.09, 0.05] 
 
         cols = st.columns(cols_ratio)
         for i, col_name in enumerate(col_names):
@@ -990,7 +990,7 @@ def show_wallet_details():
             with cols[1]: # Nova coluna para a Logo
                 # Se a imagem for o emoji, exibe o emoji diretamente
                 if op_row['crypto_image_html'] == "🪙":
-                    st.markdown("�", unsafe_allow_html=True)
+                    st.markdown("🪙", unsafe_allow_html=True)
                 else:
                     st.markdown(op_row['crypto_image_html'], unsafe_allow_html=True)
             with cols[2]: # Coluna Cripto (agora usa o display name)
