@@ -363,53 +363,55 @@ def show_dashboard():
         user_cpf = st.session_state["cpf"]
         user_carteiras_df = df_carteiras[df_carteiras['cpf_usuario'] == user_cpf].copy()
 
-        st.markdown("""
-            <div style='border:2px solid #e0e0e0; border-radius:10px; padding:20px; background-color:#fafafa;'>
-                <h3 style='margin-top:0;'>Criar nova carteira</h3>
-            </div>
-        """, unsafe_allow_html=True)
+        # --- Formulário de cadastro de carteira dentro de um expander ---
+        with st.expander("Cadastrar Carteira ➕", expanded=False): # Alterado o título e o estado inicial para fechado
+            st.markdown("""
+                <div style='border:2px solid #e0e0e0; border-radius:10px; padding:20px; background-color:#fafafa;'>
+                    <h3 style='margin-top:0;'>Cadastrar nova carteira</h3> 
+                </div>
+            """, unsafe_allow_html=True)
 
-        tipo_selecionado_criar = st.radio(
-            "Tipo de carteira",
-            ["Auto Custódia", "Corretora"],
-            key="tipo_carteira_selection_global_criar",
-            horizontal=True
-        )
+            tipo_selecionado_criar = st.radio(
+                "Tipo de carteira",
+                ["Auto Custódia", "Corretora"],
+                key="tipo_carteira_selection_global_criar",
+                horizontal=True
+            )
 
-        with st.form("form_add_carteira"):
-            nome_input_criar = ""
-            info1_input_criar = ""
-            info2_input_criar = ""
+            with st.form("form_add_carteira"):
+                nome_input_criar = ""
+                info1_input_criar = ""
+                info2_input_criar = ""
 
-            if tipo_selecionado_criar == "Auto Custódia":
-                nome_input_criar = st.selectbox("Rede", ["ETHEREUM", "SOLANA", "BITCOIN", "BASE"], key="rede_selector_criar")
-                info1_input_criar = st.text_input("Endereço da carteira", key="endereco_field_criar")
-            else: # Corretora
-                nome_input_criar = st.selectbox("Corretora", ["BINANCE", "BYBIT", "COINBASE", "OKX", "MEXC", "MERCADO BITCOIN"], key="corretora_selector_criar")
-                pass
+                if tipo_selecionado_criar == "Auto Custódia":
+                    nome_input_criar = st.selectbox("Rede", ["ETHEREUM", "SOLANA", "BITCOIN", "BASE"], key="rede_selector_criar")
+                    info1_input_criar = st.text_input("Endereço da carteira", key="endereco_field_criar")
+                else: # Corretora
+                    nome_input_criar = st.selectbox("Corretora", ["BINANCE", "BYBIT", "COINBASE", "OKX", "MEXC", "MERCADO BITCOIN"], key="corretora_selector_criar")
+                    pass
 
-            nacional_input_criar = st.radio("Origem da carteira:", ["Nacional", "Estrangeira"], key="nacionalidade_radio_field_criar")
+                nacional_input_criar = st.radio("Origem da carteira:", ["Nacional", "Estrangeira"], key="nacionalidade_radio_field_criar")
 
-            enviado_criar = st.form_submit_button("Criar carteira ➕")
-            if enviado_criar:
-                if tipo_selecionado_criar == "Auto Custódia" and (not nome_input_criar or not info1_input_criar):
-                    st.error("Por favor, preencha todos os campos obrigatórios para Auto Custódia.")
-                elif tipo_selecionado_criar == "Corretora" and not nome_input_criar:
-                    st.error("Por favor, selecione uma corretora.")
-                else:
-                    nova_carteira = pd.DataFrame([{
-                        "id": f"carteira_{uuid.uuid4()}",
-                        "tipo": tipo_selecionado_criar,
-                        "nome": nome_input_criar,
-                        "nacional": nacional_input_criar,
-                        "info1": info1_input_criar,
-                        "info2": info2_input_criar,
-                        "cpf_usuario": user_cpf
-                    }])
-                    current_carteiras_df = load_carteiras()
-                    save_carteiras(pd.concat([current_carteiras_df, nova_carteira], ignore_index=True))
-                    st.success("Carteira criada com sucesso!")
-                    st.rerun()
+                enviado_criar = st.form_submit_button("Cadastrar carteira ➕") # Alterado o texto do botão
+                if enviado_criar:
+                    if tipo_selecionado_criar == "Auto Custódia" and (not nome_input_criar or not info1_input_criar):
+                        st.error("Por favor, preencha todos os campos obrigatórios para Auto Custódia.")
+                    elif tipo_selecionado_criar == "Corretora" and not nome_input_criar:
+                        st.error("Por favor, selecione uma corretora.")
+                    else:
+                        nova_carteira = pd.DataFrame([{
+                            "id": f"carteira_{uuid.uuid4()}",
+                            "tipo": tipo_selecionado_criar,
+                            "nome": nome_input_criar,
+                            "nacional": nacional_input_criar,
+                            "info1": info1_input_criar,
+                            "info2": info2_input_criar,
+                            "cpf_usuario": user_cpf
+                        }])
+                        current_carteiras_df = load_carteiras()
+                        save_carteiras(pd.concat([current_carteiras_df, nova_carteira], ignore_index=True))
+                        st.success("Carteira criada com sucesso!")
+                        st.rerun()
 
         st.subheader("Minhas carteiras")
         if not user_carteiras_df.empty:
