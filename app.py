@@ -318,7 +318,7 @@ def show_dashboard():
             if st.session_state.get('confirm_delete_account') and st.session_state.get('delete_account_password_verified'):
                 st.markdown("""
                 <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-top:20px;">
-                    <h4 style="color:#ff0000; margin-top:0;">🛑 CONFIRMAR EXCLUSÃO DA CONTA</h4>
+                    <h4 style="color:#ff0000; margin-top:0;'>🛑 CONFIRMAR EXCLUSÃO DA CONTA</h4>
                     <p style="font-weight:bold;">Você está prestes a excluir sua conta permanentemente.</p>
                     <p style="color:#ff0000; font-weight:bold;">Todos os seus dados (informações de usuário, carteiras e todas as operações) serão APAGADOS e não poderão ser recuperados.</p>
                     <p>Tem certeza absoluta que deseja continuar?</p>
@@ -1002,58 +1002,101 @@ def show_wallet_details():
             display_options = cryptocurrencies_data_df['display_name'].tolist()
             display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data_df.to_dict('records')}
 
-            # Encontrar o índice da criptomoeda atual para o selectbox
-            current_crypto_display_name = op_details['cripto_display_name']
-            try:
-                crypto_index = display_options.index(current_crypto_display_name)
-            except ValueError:
-                crypto_index = 0 # Fallback para o primeiro item se não encontrar
+            # --- Move radio e selectbox para FORA do formulário de edição para interatividade ---
+            # Inicializa os estados para o formulário de edição se não existirem
+            # Verifica se o ID da operação sendo editada mudou para resetar o estado dos seletores
+            if 'edit_op_type' not in st.session_state or st.session_state.get('last_edited_op_id') != op_to_edit_id:
+                st.session_state['edit_op_type'] = op_details['tipo_operacao']
+                st.session_state['last_edited_op_id'] = op_to_edit_id # Guarda o ID da operação atualmente em edição
+            
+            # Garante que a cripto selecionada para edição está na lista de opções válidas
+            initial_edit_crypto_index = 0
+            if op_details['cripto_display_name'] in display_options:
+                initial_edit_crypto_index = display_options.index(op_details['cripto_display_name'])
+            
+            if 'edit_crypto_display_name' not in st.session_state or st.session_state.get('last_edited_op_id') != op_to_edit_id:
+                st.session_state['edit_crypto_display_name'] = op_details['cripto_display_name']
+                st.session_state['last_edited_op_id'] = op_to_edit_id # Garante que o ID é atualizado aqui também
+
+
+            # Callbacks para atualização do session_state
+            def update_edit_op_type():
+                st.session_state['edit_op_type'] = st.session_state[f"edit_type_radio_external_{op_to_edit_id}"]
+
+            def update_edit_crypto_select():
+                st.session_state['edit_crypto_display_name'] = st.session_state[f"edit_crypto_select_external_{op_to_edit_id}"]
+
+            edited_type_radio = st.radio( # Renomeado para evitar conflito com 'edited_type' interno do formulário
+                "Tipo de Operação", 
+                ["Compra", "Venda"], 
+                horizontal=True, 
+                key=f"edit_type_radio_external_{op_to_edit_id}", # Chave única com ID da operação
+                index=["Compra", "Venda"].index(st.session_state['edit_op_type']),
+                on_change=update_edit_op_type
+            )
+            
+            edited_selected_display_name_sb = st.selectbox( # Renomeado para evitar conflito
+                "Criptomoeda", 
+                options=display_options, 
+                key=f"edit_crypto_select_external_{op_to_edit_id}", # Chave única com ID da operação
+                index=initial_edit_crypto_index,
+                on_change=update_edit_crypto_select
+            )
+
+            # A criptomoeda e o tipo usados no formulário serão os do session_state
+            edited_cripto_symbol = ""
+            edited_selected_crypto_data = None
+            if st.session_state['edit_crypto_display_name']:
+                edited_selected_crypto_data = display_name_to_crypto_map.get(st.session_state['edit_crypto_display_name'])
+                if edited_selected_crypto_data:
+                    edited_cripto_symbol = edited_selected_crypto_data['symbol']
+            
+            # --- Exibir a imagem da cripto selecionada ---
+            if edited_selected_crypto_data:
+                if edited_selected_crypto_data['image'] and edited_selected_crypto_data['image'] != "🪙":
+                    st.markdown(
+                        f"<img src='{edited_selected_crypto_data['image']}' width='30' height='30' style='vertical-align:middle; margin-right:10px;'> "
+                        f"**{edited_selected_crypto_data['symbol']}** - {edited_selected_crypto_data['name']}", 
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.markdown(
+                        f"🪙 **{edited_selected_crypto_data['symbol']}** - {edited_selected_crypto_data['name']}",
+                        unsafe_allow_html=True
+                    )
+            else:
+                st.markdown("<p style='color:orange;'>Selecione uma criptomoeda para ver os detalhes.</p>", unsafe_allow_html=True)
+
 
             with st.form(key=f"edit_op_form_{op_to_edit_id}"):
-                edited_type = st.radio("Tipo de Operação", ["Compra", "Venda"], horizontal=True, key=f"edit_type_{op_to_edit_id}", index=["Compra", "Venda"].index(op_details['tipo_operacao']))
-                
-                edited_selected_display_name = st.selectbox(
-                    "Criptomoeda", 
-                    options=display_options, 
-                    index=crypto_index,
-                    key=f"edit_crypto_select_{op_to_edit_id}"
-                )
-                
-                edited_cripto_symbol = ""
-                edited_selected_crypto_data = None
-                if edited_selected_display_name:
-                    edited_selected_crypto_data = display_name_to_crypto_map.get(edited_selected_display_name)
-                    if edited_selected_crypto_data:
-                        edited_cripto_symbol = edited_selected_crypto_data['symbol']
-                
+                # Os inputs dentro do formulário agora usam os valores do session_state definidos acima
+                # Não precisam de `on_change` aqui, pois a interação ocorre nos widgets externos
                 edited_quantidade = st.number_input(
                     "Quantidade", 
                     min_value=0.00000001, 
                     format="%.8f", 
                     value=float(op_details['quantidade']), 
-                    key=f"edit_quantidade_{op_to_edit_id}"
+                    key=f"edit_quantidade_{op_to_edit_id}_form" # Nova chave para o widget dentro do form
                 )
 
                 valor_label_edit = ""
                 if is_foreign_wallet:
-                    valor_label_edit = "Custo Total (em USDT)" if edited_type == "Compra" else "Total da Venda (em USDT)"
+                    valor_label_edit = "Custo Total (em USDT)" if st.session_state['edit_op_type'] == "Compra" else "Total da Venda (em USDT)" # Usa o tipo do session_state
                 else:
-                    valor_label_edit = "Custo Total (em BRL)" if edited_type == "Compra" else "Total da Venda (em BRL)"
+                    valor_label_edit = "Custo Total (em BRL)" if st.session_state['edit_op_type'] == "Compra" else "Total da Venda (em BRL)" # Usa o tipo do session_state
 
-                # Para pré-preencher o custo_total_input na edição, se a carteira for estrangeira e a PTAX for 0,0
-                # ou não existir, precisamos garantir que o custo_total_usdt seja calculado corretamente
                 initial_custo_total_input = op_details['custo_total']
                 if is_foreign_wallet and pd.notna(op_details['ptax_na_op']) and op_details['ptax_na_op'] != 0:
                     initial_custo_total_input = op_details['custo_total'] / op_details['ptax_na_op']
-                elif is_foreign_wallet: # Se estrangeira e ptax NaN ou 0, um valor default
-                     initial_custo_total_input = 0.01 # Ou outro valor razoável para evitar erro
+                elif is_foreign_wallet:
+                     initial_custo_total_input = 0.01
 
                 edited_custo_total = st.number_input(
                     valor_label_edit, 
                     min_value=0.01, 
                     format="%.2f", 
                     value=float(initial_custo_total_input), 
-                    key=f"edit_custo_total_{op_to_edit_id}"
+                    key=f"edit_custo_total_{op_to_edit_id}_form" # Nova chave para o widget dentro do form
                 )
 
                 edited_ptax = 1.0
@@ -1063,26 +1106,25 @@ def show_wallet_details():
                         min_value=0.01, 
                         format="%.4f", 
                         value=float(op_details['ptax_na_op']) if pd.notna(op_details['ptax_na_op']) else 5.00, 
-                        key=f"edit_ptax_{op_to_edit_id}"
+                        key=f"edit_ptax_{op_to_edit_id}_form" # Nova chave para o widget dentro do form
                     )
 
                 edited_date = st.date_input(
                     "Data da Operação", 
                     value=op_details['data_operacao'].date(), 
-                    key=f"edit_data_op_{op_to_edit_id}"
+                    key=f"edit_data_op_{op_to_edit_id}_form" # Nova chave para o widget dentro do form
                 )
                 edited_time = st.time_input(
                     "Hora da Operação", 
                     value=op_details['data_operacao'].time(), 
-                    key=f"edit_hora_op_{op_to_edit_id}"
+                    key=f"edit_hora_op_{op_to_edit_id}_form" # Nova chave para o widget dentro do form
                 )
 
                 col_edit_submit, col_edit_cancel = st.columns([0.2, 0.8])
                 with col_edit_submit:
                     edited_submitted = st.form_submit_button("Confirmar Edição ✅", key=f"submit_edit_op_{op_to_edit_id}")
                 with col_edit_cancel:
-                    # ALTERAÇÃO AQUI: Troca de st.form_submit_button para st.button
-                    cancel_edited = st.button("Cancelar Edição", key=f"cancel_edit_op_{op_to_edit_id}")
+                    cancel_edited = st.button("Cancelar Edição", key=f"cancel_edit_op_{op_to_edit_id}") # Mantido st.button
 
                 if edited_submitted:
                     if not edited_selected_crypto_data:
@@ -1095,29 +1137,26 @@ def show_wallet_details():
                         data_hora_completa_editada = datetime.combine(edited_date, edited_time)
                         
                         df_operacoes_current = load_operacoes()
-                        # Encontrar o índice da operação a ser atualizada
                         op_index_to_update = df_operacoes_current[df_operacoes_current['id'] == op_to_edit_id].index[0]
 
-                        # Calcular custo_total_final_brl para a edição
                         custo_total_final_brl_edit = edited_custo_total
                         if is_foreign_wallet:
                             custo_total_final_brl_edit = edited_custo_total * edited_ptax
 
-                        # Recalcular preco_medio_compra_na_op e lucro_prejuizo_na_op
                         preco_medio_compra_na_op_edit = float('nan')
                         lucro_prejuizo_na_op_edit = float('nan')
 
-                        if edited_type == "Compra":
+                        if st.session_state['edit_op_type'] == "Compra": # Usa o tipo do session_state
                             if edited_quantidade > 0:
                                 preco_medio_compra_na_op_edit = custo_total_final_brl_edit / edited_quantidade
-                        elif edited_type == "Venda":
+                        elif st.session_state['edit_op_type'] == "Venda": # Usa o tipo do session_state
                             compras_anteriores_edit = df_operacoes_current[
                                 (df_operacoes_current['wallet_id'] == wallet_id) &
                                 (df_operacoes_current['cpf_usuario'] == user_cpf) &
                                 (df_operacoes_current['tipo_operacao'] == 'Compra') &
                                 (df_operacoes_current['cripto'] == edited_cripto_symbol) &
                                 (df_operacoes_current['data_operacao'] <= data_hora_completa_editada) &
-                                (df_operacoes_current['id'] != op_to_edit_id) # Excluir a própria operação se ela for uma compra anterior
+                                (df_operacoes_current['id'] != op_to_edit_id)
                             ]
 
                             if not compras_anteriores_edit.empty and compras_anteriores_edit['quantidade'].sum() > 0:
@@ -1129,8 +1168,7 @@ def show_wallet_details():
                             else:
                                 st.warning("Não há operações de compra anteriores para calcular o preço médio para esta venda editada.")
                         
-                        # Atualizar o DataFrame
-                        df_operacoes_current.loc[op_index_to_update, 'tipo_operacao'] = edited_type
+                        df_operacoes_current.loc[op_index_to_update, 'tipo_operacao'] = st.session_state['edit_op_type'] # Usa o tipo do session_state
                         df_operacoes_current.loc[op_index_to_update, 'cripto'] = edited_cripto_symbol
                         df_operacoes_current.loc[op_index_to_update, 'cripto_display_name'] = edited_selected_crypto_data['display_name']
                         df_operacoes_current.loc[op_index_to_update, 'cripto_image_url'] = edited_selected_crypto_data['image']
@@ -1418,7 +1456,14 @@ if 'delete_account_password_verified' not in st.session_state:
 # Novo estado para controlar a edição de operações
 if 'edit_operation_id' not in st.session_state:
     st.session_state['edit_operation_id'] = None
-
+# Estados para os seletores de edição (precisam ser re-inicializados quando a edição começa)
+# Adicionei 'last_edited_op_id' para saber quando resetar esses estados
+if 'edit_op_type' not in st.session_state:
+    st.session_state['edit_op_type'] = "Compra" # Default
+if 'edit_crypto_display_name' not in st.session_state:
+    st.session_state['edit_crypto_display_name'] = "" # Default vazio
+if 'last_edited_op_id' not in st.session_state:
+    st.session_state['last_edited_op_id'] = None # Para controlar o reset dos campos de edição
 
 # A lógica de persistência de login é a maneira como você inicializa 'logged_in' e 'cpf'
 # Se 'logged_in' já é True na sessão (o que acontece em uma atualização se não for resetado explicitamente),
