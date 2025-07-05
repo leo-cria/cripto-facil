@@ -5,7 +5,8 @@ import os
 import random
 import string
 import uuid
-from datetime import datetime, date, time
+from datetime import datetime, date
+import time
 import json
 import re # Importar regex para validação do input manual
 
@@ -230,7 +231,6 @@ def show_dashboard():
                 st.session_state["confirm_delete_wallet_id"] = None
                 st.session_state["confirm_delete_operation_id"] = None
                 st.session_state["confirm_delete_account"] = False # Resetar estado de exclusão de conta
-                st.session_state["edit_operation_id"] = None # Resetar estado de edição
                 st.rerun()
 
         st.markdown("---")
@@ -242,7 +242,6 @@ def show_dashboard():
             st.session_state["confirm_delete_wallet_id"] = None
             st.session_state["confirm_delete_operation_id"] = None
             st.session_state["confirm_delete_account"] = False # Resetar estado de exclusão de conta
-            st.session_state["edit_operation_id"] = None # Resetar estado de edição
             st.rerun()
 
     page = st.session_state.get("pagina_atual", "Portfólio")
@@ -318,7 +317,7 @@ def show_dashboard():
             if st.session_state.get('confirm_delete_account') and st.session_state.get('delete_account_password_verified'):
                 st.markdown("""
                 <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-top:20px;">
-                    <h4 style="color:#ff0000; margin-top:0;'>🛑 CONFIRMAR EXCLUSÃO DA CONTA</h4>
+                    <h4 style="color:#ff0000; margin-top:0;">🛑 CONFIRMAR EXCLUSÃO DA CONTA</h4>
                     <p style="font-weight:bold;">Você está prestes a excluir sua conta permanentemente.</p>
                     <p style="color:#ff0000; font-weight:bold;">Todos os seus dados (informações de usuário, carteiras e todas as operações) serão APAGADOS e não poderão ser recuperados.</p>
                     <p>Tem certeza absoluta que deseja continuar?</p>
@@ -351,7 +350,6 @@ def show_dashboard():
                         st.session_state["confirm_delete_operation_id"] = None
                         st.session_state["confirm_delete_account"] = False # Resetar
                         st.session_state['delete_account_password_verified'] = False # Resetar
-                        st.session_state["edit_operation_id"] = None # Resetar estado de edição
                         st.rerun()
                 with col_cancel_del:
                     if st.button("Cancelar", key="cancel_final_delete_account"):
@@ -437,7 +435,6 @@ def show_dashboard():
                             st.session_state["confirm_delete_wallet_id"] = None
                             st.session_state["confirm_delete_operation_id"] = None
                             st.session_state["confirm_delete_account"] = False # Resetar estado de exclusão de conta
-                            st.session_state["edit_operation_id"] = None # Resetar estado de edição
                             st.rerun()
 
                     with col_delete:
@@ -456,8 +453,8 @@ def show_dashboard():
 
                 st.markdown(f"""
                 <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-top:20px;">
-                    <h4 style="color:#ff0000; margin-top:0;'>⚠️ CONFIRMAR EXCLUSÃO DE CARTEIRA</h4>
-                    <p style="font-weight:bold;">Você tem certeza que deseja excluir a carteira <strong>"{wallet_name}"</strong>?</p>
+                    <h4 style="color:#ff0000; margin-top:0;'>⚠️ Confirmar Exclusão de Carteira</h4>
+                    <p>Você tem certeza que deseja excluir a carteira <strong>"{wallet_name}"</strong>?</p>
                     <p style="color:#ff0000; font-weight:bold;">Esta ação é irreversível e também excluirá TODAS as operações vinculadas a esta carteira!</p>
                     <p>Deseja realmente continuar?</p>
                 </div>
@@ -465,7 +462,7 @@ def show_dashboard():
 
                 col_confirm_wallet, col_cancel_wallet = st.columns([0.2, 0.8])
                 with col_confirm_wallet:
-                    if st.button("SIM, EXCLUIR", key="confirm_wallet_delete_btn_modal"):
+                    if st.button("Sim, Excluir", key="confirm_wallet_delete_btn_modal"):
                         df_carteiras_updated = df_carteiras[df_carteiras['id'] != wallet_to_confirm_delete_id]
                         save_carteiras(df_carteiras_updated)
 
@@ -715,8 +712,8 @@ def show_wallet_details():
 
     st.markdown("---")
 
-    # --- Seção de cadastro de nova operação dentro de um expander ---
-    with st.expander("➕ Cadastrar Nova Operação", expanded=False): # MODIFICADO: expanded=False
+    # --- NOVO: Seção de cadastro de nova operação dentro de um expander ---
+    with st.expander("➕ Cadastrar Nova Operação", expanded=True):
         if 'current_tipo_operacao' not in st.session_state:
             st.session_state['current_tipo_operacao'] = "Compra"
 
@@ -939,26 +936,23 @@ def show_wallet_details():
     st.markdown("---")
     st.markdown("#### Histórico de Operações Desta Carteira")
 
-    # Placeholder para o formulário de edição de operações
-    edit_op_placeholder = st.empty()
-    # Placeholder para a confirmação de exclusão
-    delete_op_placeholder = st.empty()
-
+    op_confirm_placeholder = st.empty()
     if st.session_state.get('confirm_delete_operation_id'):
-        with delete_op_placeholder.container():
+        with op_confirm_placeholder.container():
             op_to_confirm_delete_id = st.session_state['confirm_delete_operation_id']
             df_operacoes = load_operacoes()
 
             if op_to_confirm_delete_id in df_operacoes['id'].values:
                 op_details = df_operacoes[df_operacoes['id'] == op_to_confirm_delete_id].iloc[0]
+                # Modificar a exibição da quantidade para usar format_number_br
                 op_info_display = (f"{op_details['tipo_operacao']} de {format_number_br(op_details['quantidade'], decimals=8)} "
-                                f"{op_details['cripto_display_name']} ({format_currency_brl(op_details['custo_total'])}) em " 
+                                f"{op_details['cripto_display_name']} ({format_currency_brl(op_details['custo_total'])}) em " # Usa cripto_display_name
                                 f"{op_details['data_operacao'].strftime('%d/%m/%Y %H:%M')}")
 
                 st.markdown(f"""
                 <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-bottom:20px;">
-                    <h4 style="color:#ff0000; margin-top:0;'>⚠️ CONFIRMAR EXCLUSÃO DE OPERAÇÃO</h4>
-                    <p style="font-weight:bold;">Você tem certeza que deseja excluir a seguinte operação?</p>
+                    <h4 style="color:#ff0000; margin-top:0;'>⚠️ Confirmar Exclusão de Operação</h4>
+                    <p>Você tem certeza que deseja excluir a seguinte operação?</p>
                     <p style="font-weight:bold;">{op_info_display}</p>
                     <p style="color:#ff0000; font-weight:bold;">Esta ação é irreversível e não poderá ser desfeita.</p>
                     <p>Deseja realmente continuar?</p>
@@ -967,232 +961,25 @@ def show_wallet_details():
 
                 col_confirm_op, col_cancel_op = st.columns([0.2, 0.8])
                 with col_confirm_op:
-                    if st.button("SIM, EXCLUIR", key="confirm_op_delete_btn_modal"):
+                    if st.button("Sim, Excluir", key="confirm_op_delete_btn_modal"):
                         df_ops_after_delete = df_operacoes[df_operacoes['id'] != op_to_confirm_delete_id]
                         save_operacoes(df_ops_after_delete)
                         st.success("Operação excluída com sucesso!")
                         st.session_state['confirm_delete_operation_id'] = None
-                        delete_op_placeholder.empty()
+                        op_confirm_placeholder.empty()
                         st.rerun()
                 with col_cancel_op:
                     if st.button("Cancelar", key="cancel_op_delete_btn_modal"):
                         st.session_state['confirm_delete_operation_id'] = None
-                        delete_op_placeholder.empty()
+                        op_confirm_placeholder.empty()
                         st.rerun()
             else:
                 st.session_state['confirm_delete_operation_id'] = None
-                delete_op_placeholder.empty()
+                op_confirm_placeholder.empty()
                 st.warning("A operação que você tentou excluir não foi encontrada.")
                 st.rerun()
-    elif st.session_state.get('edit_operation_id'):
-        with edit_op_placeholder.container():
-            op_to_edit_id = st.session_state['edit_operation_id']
-            df_operacoes = load_operacoes()
-            op_details = df_operacoes[df_operacoes['id'] == op_to_edit_id].iloc[0]
-
-            st.markdown(f"""
-            <div style="background-color:#e6f7ff; border:1px solid #007bff; border-radius:5px; padding:10px; margin-bottom:20px;">
-                <h4 style="color:#007bff; margin-top:0;">📝 EDITAR OPERAÇÃO</h4>
-                <p>Editando operação: <strong>{op_details['tipo_operacao']} de {op_details['cripto_display_name']} em {op_details['data_operacao'].strftime('%d/%m/%Y %H:%M')}</strong></p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Carrega a lista de dicionários de criptomoedas
-            _, cryptocurrencies_data_df = load_cryptocurrencies_from_file()
-            display_options = cryptocurrencies_data_df['display_name'].tolist()
-            display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data_df.to_dict('records')}
-
-            # --- Move radio e selectbox para FORA do formulário de edição para interatividade ---
-            # Inicializa os estados para o formulário de edição se não existirem
-            # Verifica se o ID da operação sendo editada mudou para resetar o estado dos seletores
-            if 'edit_op_type' not in st.session_state or st.session_state.get('last_edited_op_id') != op_to_edit_id:
-                st.session_state['edit_op_type'] = op_details['tipo_operacao']
-                st.session_state['last_edited_op_id'] = op_to_edit_id # Guarda o ID da operação atualmente em edição
-            
-            # Garante que a cripto selecionada para edição está na lista de opções válidas
-            initial_edit_crypto_index = 0
-            if op_details['cripto_display_name'] in display_options:
-                initial_edit_crypto_index = display_options.index(op_details['cripto_display_name'])
-            
-            if 'edit_crypto_display_name' not in st.session_state or st.session_state.get('last_edited_op_id') != op_to_edit_id:
-                st.session_state['edit_crypto_display_name'] = op_details['cripto_display_name']
-                st.session_state['last_edited_op_id'] = op_to_edit_id # Garante que o ID é atualizado aqui também
-
-
-            # Callbacks para atualização do session_state
-            def update_edit_op_type():
-                st.session_state['edit_op_type'] = st.session_state[f"edit_type_radio_external_{op_to_edit_id}"]
-
-            def update_edit_crypto_select():
-                st.session_state['edit_crypto_display_name'] = st.session_state[f"edit_crypto_select_external_{op_to_edit_id}"]
-
-            edited_type_radio = st.radio( # Renomeado para evitar conflito com 'edited_type' interno do formulário
-                "Tipo de Operação", 
-                ["Compra", "Venda"], 
-                horizontal=True, 
-                key=f"edit_type_radio_external_{op_to_edit_id}", # Chave única com ID da operação
-                index=["Compra", "Venda"].index(st.session_state['edit_op_type']),
-                on_change=update_edit_op_type
-            )
-            
-            edited_selected_display_name_sb = st.selectbox( # Renomeado para evitar conflito
-                "Criptomoeda", 
-                options=display_options, 
-                key=f"edit_crypto_select_external_{op_to_edit_id}", # Chave única com ID da operação
-                index=initial_edit_crypto_index,
-                on_change=update_edit_crypto_select
-            )
-
-            # A criptomoeda e o tipo usados no formulário serão os do session_state
-            edited_cripto_symbol = ""
-            edited_selected_crypto_data = None
-            if st.session_state['edit_crypto_display_name']:
-                edited_selected_crypto_data = display_name_to_crypto_map.get(st.session_state['edit_crypto_display_name'])
-                if edited_selected_crypto_data:
-                    edited_cripto_symbol = edited_selected_crypto_data['symbol']
-            
-            # --- Exibir a imagem da cripto selecionada ---
-            if edited_selected_crypto_data:
-                if edited_selected_crypto_data['image'] and edited_selected_crypto_data['image'] != "🪙":
-                    st.markdown(
-                        f"<img src='{edited_selected_crypto_data['image']}' width='30' height='30' style='vertical-align:middle; margin-right:10px;'> "
-                        f"**{edited_selected_crypto_data['symbol']}** - {edited_selected_crypto_data['name']}", 
-                        unsafe_allow_html=True
-                    )
-                else:
-                    st.markdown(
-                        f"🪙 **{edited_selected_crypto_data['symbol']}** - {edited_selected_crypto_data['name']}",
-                        unsafe_allow_html=True
-                    )
-            else:
-                st.markdown("<p style='color:orange;'>Selecione uma criptomoeda para ver os detalhes.</p>", unsafe_allow_html=True)
-
-
-            
-with st.form(key=f"edit_op_form_{op_to_edit_id}"):
-    edited_quantidade = st.number_input(
-        "Quantidade", 
-        min_value=0.00000001, 
-        format="%.8f", 
-        value=float(op_details['quantidade']), 
-        key=f"edit_quantidade_{op_to_edit_id}_form"
-    )
-
-    valor_label_edit = "Custo Total (em USDT)" if is_foreign_wallet and st.session_state['edit_op_type'] == "Compra" else \
-                       "Total da Venda (em USDT)" if is_foreign_wallet else \
-                       "Custo Total (em BRL)" if st.session_state['edit_op_type'] == "Compra" else \
-                       "Total da Venda (em BRL)"
-
-    initial_custo_total_input = op_details['custo_total']
-    if is_foreign_wallet and pd.notna(op_details['ptax_na_op']) and op_details['ptax_na_op'] != 0:
-        initial_custo_total_input = op_details['custo_total'] / op_details['ptax_na_op']
-
-    edited_custo_total = st.number_input(
-        valor_label_edit, 
-        min_value=0.01, 
-        format="%.2f", 
-        value=float(initial_custo_total_input), 
-        key=f"edit_custo_total_{op_to_edit_id}_form"
-    )
-
-    edited_ptax = 1.0
-    if is_foreign_wallet:
-        edited_ptax = st.number_input(
-            "Taxa PTAX (BRL por USDT)",
-            min_value=0.01, 
-            format="%.4f", 
-            value=float(op_details['ptax_na_op']) if pd.notna(op_details['ptax_na_op']) else 5.00, 
-            key=f"edit_ptax_{op_to_edit_id}_form"
-        )
-
-    edited_date = st.date_input(
-        "Data da Operação", 
-        value=op_details['data_operacao'].date(), 
-        key=f"edit_data_op_{op_to_edit_id}_form"
-    )
-    edited_time = st.time_input(
-        "Hora da Operação", 
-        value=op_details['data_operacao'].time(), 
-        key=f"edit_hora_op_{op_to_edit_id}_form"
-    )
-
-    edited_submitted = st.form_submit_button("Confirmar Edição ✅", key=f"submit_edit_op_{op_to_edit_id}")
-
-# --- Botão de cancelar (fora do form) ---
-    cancel_edited = st.button("Cancelar Edição", key=f"cancel_edit_op_{op_to_edit_id}")
-    if cancel_edited:
-        st.session_state['edit_operation_id'] = None
-        edit_op_placeholder.empty()
-        st.info("Edição da operação cancelada.")
-        st.rerun()
-
-                if edited_submitted:
-                    if not edited_selected_crypto_data:
-                        st.error("Por favor, selecione uma criptomoeda válida para a edição.")
-                    elif edited_quantidade <= 0 or edited_custo_total <= 0:
-                        st.error("Por favor, preencha todos os campos da operação corretamente para a edição.")
-                    elif is_foreign_wallet and edited_ptax <= 0:
-                        st.error("Por favor, informe uma taxa PTAX válida para carteiras estrangeiras na edição.")
-                    else:
-                        data_hora_completa_editada = datetime.combine(edited_date, edited_time)
-                        
-                        df_operacoes_current = load_operacoes()
-                        op_index_to_update = df_operacoes_current[df_operacoes_current['id'] == op_to_edit_id].index[0]
-
-                        custo_total_final_brl_edit = edited_custo_total
-                        if is_foreign_wallet:
-                            custo_total_final_brl_edit = edited_custo_total * edited_ptax
-
-                        preco_medio_compra_na_op_edit = float('nan')
-                        lucro_prejuizo_na_op_edit = float('nan')
-
-                        if st.session_state['edit_op_type'] == "Compra": # Usa o tipo do session_state
-                            if edited_quantidade > 0:
-                                preco_medio_compra_na_op_edit = custo_total_final_brl_edit / edited_quantidade
-                        elif st.session_state['edit_op_type'] == "Venda": # Usa o tipo do session_state
-                            compras_anteriores_edit = df_operacoes_current[
-                                (df_operacoes_current['wallet_id'] == wallet_id) &
-                                (df_operacoes_current['cpf_usuario'] == user_cpf) &
-                                (df_operacoes_current['tipo_operacao'] == 'Compra') &
-                                (df_operacoes_current['cripto'] == edited_cripto_symbol) &
-                                (df_operacoes_current['data_operacao'] <= data_hora_completa_editada) &
-                                (df_operacoes_current['id'] != op_to_edit_id)
-                            ]
-
-                            if not compras_anteriores_edit.empty and compras_anteriores_edit['quantidade'].sum() > 0:
-                                total_custo_compras_edit = compras_anteriores_edit['custo_total'].sum()
-                                total_quantidade_compras_edit = compras_anteriores_edit['quantidade'].sum()
-                                preco_medio_compra_na_op_edit = total_custo_compras_edit / total_quantidade_compras_edit
-                                custo_base_da_venda_edit = edited_quantidade * preco_medio_compra_na_op_edit
-                                lucro_prejuizo_na_op_edit = custo_total_final_brl_edit - custo_base_da_venda_edit
-                            else:
-                                st.warning("Não há operações de compra anteriores para calcular o preço médio para esta venda editada.")
-                        
-                        df_operacoes_current.loc[op_index_to_update, 'tipo_operacao'] = st.session_state['edit_op_type'] # Usa o tipo do session_state
-                        df_operacoes_current.loc[op_index_to_update, 'cripto'] = edited_cripto_symbol
-                        df_operacoes_current.loc[op_index_to_update, 'cripto_display_name'] = edited_selected_crypto_data['display_name']
-                        df_operacoes_current.loc[op_index_to_update, 'cripto_image_url'] = edited_selected_crypto_data['image']
-                        df_operacoes_current.loc[op_index_to_update, 'quantidade'] = float(edited_quantidade)
-                        df_operacoes_current.loc[op_index_to_update, 'custo_total'] = custo_total_final_brl_edit
-                        df_operacoes_current.loc[op_index_to_update, 'data_operacao'] = data_hora_completa_editada
-                        df_operacoes_current.loc[op_index_to_update, 'preco_medio_compra_na_op'] = preco_medio_compra_na_op_edit
-                        df_operacoes_current.loc[op_index_to_update, 'lucro_prejuizo_na_op'] = lucro_prejuizo_na_op_edit
-                        df_operacoes_current.loc[op_index_to_update, 'ptax_na_op'] = edited_ptax
-                        
-                        save_operacoes(df_operacoes_current)
-                        st.success("Operação editada com sucesso!")
-                        st.session_state['edit_operation_id'] = None
-                        edit_op_placeholder.empty()
-                        st.rerun()
-                
-                if cancel_edited:
-                    st.session_state['edit_operation_id'] = None
-                    edit_op_placeholder.empty()
-                    st.info("Edição da operação cancelada.")
-                    st.rerun()
     else:
-        edit_op_placeholder.empty()
-        delete_op_placeholder.empty()
+        op_confirm_placeholder.empty()
 
     df_operacoes = load_operacoes()
     wallet_operations_all = df_operacoes[
@@ -1267,8 +1054,8 @@ with st.form(key=f"edit_op_form_{op_to_edit_id}"):
             "Valor Total (USDT)", "Valor Total (BRL)", "P. Médio Compra",
             "P. Médio Venda", "Lucro/Prejuízo", "Data/Hora", "Origem", "Ações"
         ]
-        # Ajustando os ratios das colunas para caber na tela, 'Origem' aumentada, 'Ações' com mais espaço
-        cols_ratio = [0.05, 0.04, 0.09, 0.08, 0.06, 0.09, 0.09, 0.09, 0.09, 0.09, 0.08, 0.09, 0.08] # Alterado: Ações de 0.05 para 0.08
+        # Ajustando os ratios das colunas para caber na tela, 'Origem' aumentada
+        cols_ratio = [0.05, 0.04, 0.10, 0.08, 0.06, 0.09, 0.09, 0.09, 0.09, 0.09, 0.08, 0.09, 0.05] 
 
         cols = st.columns(cols_ratio)
         for i, col_name in enumerate(col_names):
@@ -1333,17 +1120,9 @@ with st.form(key=f"edit_op_form_{op_to_edit_id}"):
             with cols[11]:
                 st.write(op_row['origem_carteira'])
             with cols[12]: # Coluna Ações
-                col_actions_edit, col_actions_delete = st.columns(2)
-                with col_actions_edit:
-                    if st.button("✏️", key=f"edit_op_{op_row['id']}", help="Editar Operação"):
-                        st.session_state['edit_operation_id'] = op_row['id']
-                        st.session_state['confirm_delete_operation_id'] = None # Resetar confirmação de exclusão
-                        st.rerun()
-                with col_actions_delete:
-                    if st.button("🗑️", key=f"delete_op_{op_row['id']}", help="Excluir Operação"):
-                        st.session_state['confirm_delete_operation_id'] = op_row['id']
-                        st.session_state['edit_operation_id'] = None # Resetar edição
-                        st.rerun()
+                if st.button("🗑️", key=f"delete_op_{op_row['id']}", help="Excluir Operação"):
+                    st.session_state['confirm_delete_operation_id'] = op_row['id']
+                    st.rerun()
 
         st.markdown("---")
     else:
@@ -1453,17 +1232,7 @@ if 'confirm_delete_account' not in st.session_state:
 # Novo estado para verificar se a senha da exclusão de conta foi validada
 if 'delete_account_password_verified' not in st.session_state:
     st.session_state['delete_account_password_verified'] = False
-# Novo estado para controlar a edição de operações
-if 'edit_operation_id' not in st.session_state:
-    st.session_state['edit_operation_id'] = None
-# Estados para os seletores de edição (precisam ser re-inicializados quando a edição começa)
-# Adicionei 'last_edited_op_id' para saber quando resetar esses estados
-if 'edit_op_type' not in st.session_state:
-    st.session_state['edit_op_type'] = "Compra" # Default
-if 'edit_crypto_display_name' not in st.session_state:
-    st.session_state['edit_crypto_display_name'] = "" # Default vazio
-if 'last_edited_op_id' not in st.session_state:
-    st.session_state['last_edited_op_id'] = None # Para controlar o reset dos campos de edição
+
 
 # A lógica de persistência de login é a maneira como você inicializa 'logged_in' e 'cpf'
 # Se 'logged_in' já é True na sessão (o que acontece em uma atualização se não for resetado explicitamente),
