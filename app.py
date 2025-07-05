@@ -104,12 +104,19 @@ def load_operacoes():
         # --- NOVO: Garante que a coluna 'cripto_display_name' exista ---
         if 'cripto_display_name' not in df.columns:
             # Para dados antigos, tenta construir um display_name a partir do símbolo
-            # Ou define como o símbolo se não houver nome correspondente
             df['cripto_display_name'] = df['cripto'].apply(
                 lambda x: f"{x} - (Nome Desconhecido)" if pd.notna(x) and str(x).strip() != '' else ""
             )
         else:
             df['cripto_display_name'] = df['cripto_display_name'].astype(str).replace('nan', '')
+
+        # --- NOVO: Garante que a coluna 'cripto_image_url' exista ---
+        if 'cripto_image_url' not in df.columns:
+            # Para dados antigos, usa o emoji de moeda como padrão
+            df['cripto_image_url'] = "🪙"
+        else:
+            df['cripto_image_url'] = df['cripto_image_url'].astype(str).replace('nan', '�')
+
 
         return df
     return pd.DataFrame(columns=[
@@ -118,7 +125,8 @@ def load_operacoes():
         "preco_medio_compra_na_op",
         "lucro_prejuizo_na_op",
         "ptax_na_op",
-        "cripto_display_name" # Adicionada nova coluna
+        "cripto_display_name", # Adicionada nova coluna
+        "cripto_image_url" # Adicionada nova coluna
     ])
 
 def save_operacoes(df):
@@ -224,7 +232,7 @@ def show_dashboard():
                 st.rerun()
 
         st.markdown("---")
-        if st.button("� Sair"):
+        if st.button("🔒 Sair"):
             st.session_state["logged_in"] = False
             st.session_state["auth_page"] = "login"
             st.session_state["pagina_atual"] = "Portfólio"
@@ -472,6 +480,7 @@ def show_wallet_details():
             total_lucro_realizado = vendas_realizadas_totais['lucro_prejuizo_na_op'].sum()
 
         # --- Calcular detalhes do portfólio atual por cripto ---
+        # Agrupa por símbolo da cripto para calcular o portfólio atual
         for cripto_simbolo in wallet_ops_for_portfolio['cripto'].unique():
             ops_cripto = wallet_ops_for_portfolio[wallet_ops_for_portfolio['cripto'] == cripto_simbolo]
 
@@ -506,16 +515,15 @@ def show_wallet_details():
                 valor_atual_posicao = quantidade_atual * current_price
                 total_valor_atual_carteira += valor_atual_posicao # Adiciona ao total da carteira
 
-                # Encontrar a imagem da cripto ou usar emoji se for manual
-                crypto_info = cryptocurrencies_data_df[cryptocurrencies_data_df['symbol'] == cripto_simbolo.upper()]
-                if not crypto_info.empty and crypto_info['image'].iloc[0]: # Verifica se a imagem existe e não é vazia
-                    image_url = crypto_info['image'].iloc[0]
-                else:
-                    # Se não encontrar na lista ou a imagem for vazia, assume que é uma cripto manual e usa o emoji
-                    image_url = "🪙" 
-
+                # --- NOVO: Pega o display_name e image_url da última operação registrada para essa cripto ---
+                # Isso garante que o nome e imagem exibidos no portfólio correspondam ao que foi salvo na operação
+                last_op_for_crypto = ops_cripto.sort_values(by='data_operacao', ascending=False).iloc[0]
+                display_name_for_portfolio = last_op_for_crypto['cripto_display_name']
+                image_url_for_portfolio = last_op_for_crypto['cripto_image_url']
+                
                 portfolio_detail[cripto_simbolo] = {
-                    'image': image_url, # Adiciona a URL da imagem ou emoji
+                    'display_name': display_name_for_portfolio, # Usa o display_name da operação
+                    'image': image_url_for_portfolio, # Usa a image_url da operação
                     'quantidade': float(quantidade_atual),
                     'custo_total': float(custo_total_atual_estimado),
                     'custo_medio': float(custo_medio),
@@ -527,7 +535,9 @@ def show_wallet_details():
     # Criar DataFrame para o portfólio detalhado
     portfolio_df = pd.DataFrame.from_dict(portfolio_detail, orient='index').reset_index()
     if not portfolio_df.empty:
-        portfolio_df.columns = ['Cripto', 'Imagem', 'Quantidade', 'Custo Total', 'Custo Médio', 'Lucro Realizado', 'Preço Atual (BRL)', 'Valor Atual da Posição']
+        # Renomeia a coluna 'index' para 'Cripto' e 'display_name' para 'Cripto_Display'
+        portfolio_df.rename(columns={'index': 'Cripto_Symbol', 'display_name': 'Cripto'}, inplace=True)
+        
         portfolio_df = portfolio_df[portfolio_df['Quantidade'] > 0] # Filtrar só as que tem saldo > 0
 
         # Calcular o Custo Total da Carteira com base no portfolio_df filtrado
@@ -568,8 +578,8 @@ def show_wallet_details():
         else:
             portfolio_df['POSIÇÃO'] = 0.0
 
-        # Ordenar por 'Custo Total' em ordem decrescente
-        portfolio_df = portfolio_df.sort_values(by='Custo Total', ascending=False)
+        # --- NOVO: Ordenar por 'POSIÇÃO' em ordem decrescente ---
+        portfolio_df = portfolio_df.sort_values(by='POSIÇÃO', ascending=False)
 
         # Definindo as colunas e seus respectivos ratios (ajustados para a nova coluna "Imagem" e "POSIÇÃO")
         col_names_portfolio = ["Imagem", "Cripto", "Quantidade", "Custo Total", "Custo Médio", "Lucro Realizado", "Preço Atual (BRL)", "Valor Atual da Posição", "POSIÇÃO"]
@@ -850,6 +860,7 @@ def show_wallet_details():
                     "tipo_operacao": current_op_type,
                     "cripto": str(cripto_symbol), # Salva o símbolo (ex: BTC, SOL, MEUCUSTOM)
                     "cripto_display_name": selected_crypto_for_display['display_name'], # NOVO: Salva o nome de exibição completo
+                    "cripto_image_url": selected_crypto_for_display['image'], # NOVO: Salva a URL da imagem ou emoji
                     "quantidade": float(quantidade), # Garante que a quantidade é salva como float
                     "custo_total": custo_total_final_brl, # Salva o valor já convertido para BRL
                     "data_operacao": data_hora_completa,
@@ -981,18 +992,10 @@ def show_wallet_details():
         filtered_operations = filtered_operations[filtered_operations['data_operacao'].dt.date == single_date]
 
     if not filtered_operations.empty:
-        # Mapear símbolos para o objeto completo da criptomoeda
-        symbol_to_full_crypto_info_map = {crypto['symbol']: crypto for crypto in cryptocurrencies_data_df.to_dict('records')}
-        
-        # Criar novas colunas para a logo e o texto da cripto na tabela
-        filtered_operations['crypto_image_html'] = filtered_operations['cripto'].apply(
-            lambda symbol: (
-                f"<img src='{symbol_to_full_crypto_info_map[symbol]['image']}' width='20' height='20' style='vertical-align:middle; margin-right:5px;'>"
-                if symbol in symbol_to_full_crypto_info_map and symbol_to_full_crypto_info_map[symbol].get('image') and symbol_to_full_crypto_info_map[symbol].get('image') != "🪙"
-                else "🪙" # Se não encontrar ou a imagem for o emoji padrão, usa o emoji
-            )
+        # --- NOVO: Usa diretamente as colunas salvas na operação para exibição ---
+        filtered_operations['crypto_image_html'] = filtered_operations['cripto_image_url'].apply(
+            lambda url: f"<img src='{url}' width='20' height='20' style='vertical-align:middle; margin-right:5px;'>" if url and url != "🪙" else "🪙"
         )
-        # --- NOVO: Usa diretamente a coluna cripto_display_name para exibição ---
         filtered_operations['cripto_text_display'] = filtered_operations['cripto_display_name']
 
         # Definindo as colunas e seus respectivos ratios (ajustados para a nova coluna "Logo")
