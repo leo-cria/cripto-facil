@@ -267,7 +267,7 @@ def show_dashboard():
                 atual = st.text_input("Senha atual", type="password")
                 nova = st.text_input("Nova senha", type="password")
                 confirmar = st.text_input("Confirme a senha", type="password")
-                ok = st.form_submit_button("Alterar senha �")
+                ok = st.form_submit_button("Alterar senha 🔑")
                 if ok:
                     if hash_password(atual) != usuario['password_hash']:
                         st.error("Senha atual incorreta.")
@@ -444,20 +444,10 @@ def show_wallet_details():
     crypto_prices = {crypto['symbol'].upper(): crypto.get('current_price_brl', 0) for crypto in cryptocurrencies_data_df.to_dict('records')}
 
     # Título do Portfólio Consolidado com a data de atualização
-    col_portfolio_title, col_update_date = st.columns([0.7, 0.3])
+    col_portfolio_title, col_update_date_placeholder = st.columns([0.7, 0.3]) # Placeholder para alinhar
     with col_portfolio_title:
         st.markdown("#### Portfólio Consolidado da Carteira")
-    with col_update_date:
-        if last_updated_timestamp:
-            try:
-                # Converte a string ISO para objeto datetime e formata para dd/mm/aaaa
-                updated_dt = datetime.fromisoformat(last_updated_timestamp)
-                st.markdown(f"**Atualizado em:** {updated_dt.strftime('%d/%m/%Y')}")
-            except ValueError:
-                st.markdown("Não foi possível formatar a data de atualização da API.")
-        else:
-            st.markdown("Data de atualização da API não disponível.")
-
+    # A data de atualização será exibida junto com o Valor Atual da Carteira para alinhamento
 
     df_operacoes_portfolio = load_operacoes()
     wallet_ops_for_portfolio = df_operacoes_portfolio[
@@ -533,20 +523,20 @@ def show_wallet_details():
                 }
 
     # Criar DataFrame para o portfólio detalhado
-    portfolio_df = pd.DataFrame.from_dict(portfolio_detail, orient='index').reset_index()
+    portfolio_df = pd.DataFrame.from_dict(portfolio_detail, orient='index')
     if not portfolio_df.empty:
-        # --- CORREÇÃO: Atribuição explícita de nomes de colunas para garantir a capitalização correta ---
-        portfolio_df.columns = [
-            'Cripto_Symbol',         # O símbolo original da cripto (do índice)
-            'Cripto',                # O display_name da cripto
-            'Imagem',                # A URL da imagem ou emoji
-            'Quantidade',            # A quantidade atual
-            'Custo Total',           # O custo total
-            'Custo Médio',           # O custo médio
-            'Lucro Realizado',       # O lucro realizado
-            'Preço Atual (BRL)',     # O preço atual em BRL
-            'Valor Atual da Posição' # O valor atual da posição
-        ]
+        # --- CORREÇÃO: Renomear colunas explicitamente para evitar KeyError e garantir casing ---
+        portfolio_df = portfolio_df.reset_index().rename(columns={
+            'index': 'Cripto_Symbol',
+            'display_name': 'Cripto',
+            'image': 'Imagem',
+            'quantidade': 'Quantidade',
+            'custo_total': 'Custo Total',
+            'custo_medio': 'Custo Médio',
+            'lucro_realizado': 'Lucro Realizado',
+            'current_price_brl': 'Preço Atual (BRL)',
+            'valor_atual_posicao': 'Valor Atual da Posição'
+        })
         
         portfolio_df = portfolio_df[portfolio_df['Quantidade'] > 0] # Filtrar só as que tem saldo > 0
 
@@ -559,7 +549,7 @@ def show_wallet_details():
     col_custo, col_lucro, col_valor_atual = st.columns(3)
     with col_custo:
         st.markdown(
-            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Custo Total da Carteira (Ativo)</p>"
+            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Custo Total da Carteira (Ativo) (BRL)</p>" # Adicionado (BRL)
             f"<p style='text-align: center; font-size: 24px; font-weight: bold;'>{format_currency_brl(total_custo_carteira_atualizado)}</p>",
             unsafe_allow_html=True
         )
@@ -567,16 +557,25 @@ def show_wallet_details():
         # Aplicar cor ao Lucro Realizado Total da Carteira
         color_lucro_total = "green" if total_lucro_realizado > 0 else ("red" if total_lucro_realizado < 0 else "black")
         st.markdown(
-            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Lucro Realizado Total da Carteira</p>"
+            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Lucro Realizado Total da Carteira (BRL)</p>" # Adicionado (BRL)
             f"<p style='text-align: center; color: {color_lucro_total}; font-size: 24px; font-weight: bold;'>{format_currency_brl(total_lucro_realizado)}</p>", 
             unsafe_allow_html=True
         )
     with col_valor_atual:
         st.markdown(
-            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Valor Atual da Carteira</p>"
+            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Valor Atual da Carteira (BRL)</p>" # Adicionado (BRL)
             f"<p style='text-align: center; font-size: 24px; font-weight: bold;'>{format_currency_brl(total_valor_atual_carteira)}</p>",
             unsafe_allow_html=True
         )
+        # --- NOVO: Alinhamento da data de atualização ---
+        if last_updated_timestamp:
+            try:
+                updated_dt = datetime.fromisoformat(last_updated_timestamp)
+                st.markdown(f"<p style='text-align: center; font-size: 14px; margin-top: 5px;'>Atualizado em: {updated_dt.strftime('%d/%m/%Y')}</p>", unsafe_allow_html=True)
+            except ValueError:
+                st.markdown("<p style='text-align: center; font-size: 14px; margin-top: 5px;'>Data de atualização não disponível.</p>", unsafe_allow_html=True)
+        else:
+            st.markdown("<p style='text-align: center; font-size: 14px; margin-top: 5px;'>Data de atualização não disponível.</p>", unsafe_allow_html=True)
 
 
     st.markdown("---")
@@ -591,9 +590,9 @@ def show_wallet_details():
         # --- NOVO: Ordenar por 'POSIÇÃO' em ordem decrescente ---
         portfolio_df = portfolio_df.sort_values(by='POSIÇÃO', ascending=False)
 
-        # Definindo as colunas e seus respectivos ratios (ajustados para a nova coluna "Imagem" e "POSIÇÃO")
-        col_names_portfolio = ["Imagem", "Cripto", "Quantidade", "Custo Total", "Custo Médio", "Lucro Realizado", "Preço Atual (BRL)", "Valor Atual da Posição", "POSIÇÃO"]
-        cols_ratio_portfolio = [0.05, 0.10, 0.12, 0.12, 0.12, 0.12, 0.12, 0.12, 0.13] # Ajustado para 9 colunas
+        # Definindo as colunas e seus respectivos ratios (REMOVIDAS: Custo Médio e Preço Atual (BRL))
+        col_names_portfolio = ["Imagem", "Cripto", "Quantidade", "Custo Total", "Lucro Realizado", "Valor Atual da Posição", "POSIÇÃO"]
+        cols_ratio_portfolio = [0.07, 0.15, 0.15, 0.15, 0.15, 0.18, 0.15] # Ajustado para 7 colunas
 
         cols_portfolio = st.columns(cols_ratio_portfolio)
         for i, col_name in enumerate(col_names_portfolio):
@@ -615,18 +614,14 @@ def show_wallet_details():
             with cols_portfolio[2]:
                 # Formatar a quantidade com ponto e vírgula do Brasil
                 st.write(format_number_br(row['Quantidade'], decimals=8))
-            with cols_portfolio[3]:
+            with cols_portfolio[3]: # Custo Total
                 st.write(format_currency_brl(row['Custo Total']))
-            with cols_portfolio[4]:
-                st.write(format_currency_brl(row['Custo Médio']))
-            with cols_portfolio[5]:
+            with cols_portfolio[4]: # Lucro Realizado
                 color = "green" if row['Lucro Realizado'] >= 0 else "red"
                 st.markdown(f"<span style='color:{color}'>{format_currency_brl(row['Lucro Realizado'])}</span>", unsafe_allow_html=True)
-            with cols_portfolio[6]: # Preço Atual (BRL)
-                st.write(format_currency_brl(row['Preço Atual (BRL)']))
-            with cols_portfolio[7]: # Valor Atual da Posição
+            with cols_portfolio[5]: # Valor Atual da Posição
                 st.write(format_currency_brl(row['Valor Atual da Posição']))
-            with cols_portfolio[8]: # POSIÇÃO
+            with cols_portfolio[6]: # POSIÇÃO
                 st.write(f"{format_number_br(row['POSIÇÃO'], decimals=2)}%")
         st.markdown("---")
     else:
@@ -659,7 +654,6 @@ def show_wallet_details():
     display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data_df.to_dict('records')}
 
     # --- REMOVIDO: Opção de "Inserir manualmente..." ---
-    # display_options_with_manual = [MANUAL_INPUT_OPTION] + display_options
     
     # Inicializa o estado para a opção selecionada no selectbox
     if 'selected_crypto_display_name' not in st.session_state:
