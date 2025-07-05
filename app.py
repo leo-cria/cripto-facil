@@ -1119,14 +1119,12 @@ with st.form(key=f"edit_op_form_{op_to_edit_id}"):
     edited_submitted = st.form_submit_button("Confirmar Edição ✅", key=f"submit_edit_op_{op_to_edit_id}")
 
 # --- Botão de cancelar (fora do form) ---
-cancel_edited = st.button("Cancelar Edição", key=f"cancel_edit_op_{op_to_edit_id}")
-if cancel_edited:
-    st.session_state['edit_operation_id'] = None
-    edit_op_placeholder.empty()
-    st.info("Edição da operação cancelada.")
-    st.rerun()
-
-                    cancel_edited = st.button("Cancelar Edição", key=f"cancel_edit_op_{op_to_edit_id}") # Mantido st.button
+    cancel_edited = st.button("Cancelar Edição", key=f"cancel_edit_op_{op_to_edit_id}")
+    if cancel_edited:
+        st.session_state['edit_operation_id'] = None
+        edit_op_placeholder.empty()
+        st.info("Edição da operação cancelada.")
+        st.rerun()
 
                 if edited_submitted:
                     if not edited_selected_crypto_data:
