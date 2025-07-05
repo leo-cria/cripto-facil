@@ -95,20 +95,30 @@ def load_operacoes():
         else:
             df['ptax_na_op'] = pd.to_numeric(df['ptax_na_op'], errors='coerce')
 
-
         df['data_operacao'] = pd.to_datetime(df['data_operacao'], errors='coerce')
         
         # Garante que a coluna 'cripto' seja do tipo string e substitui 'nan' literal
         if 'cripto' in df.columns:
             df['cripto'] = df['cripto'].astype(str).replace('nan', '') 
         
+        # --- NOVO: Garante que a coluna 'cripto_display_name' exista ---
+        if 'cripto_display_name' not in df.columns:
+            # Para dados antigos, tenta construir um display_name a partir do símbolo
+            # Ou define como o símbolo se não houver nome correspondente
+            df['cripto_display_name'] = df['cripto'].apply(
+                lambda x: f"{x} - (Nome Desconhecido)" if pd.notna(x) and str(x).strip() != '' else ""
+            )
+        else:
+            df['cripto_display_name'] = df['cripto_display_name'].astype(str).replace('nan', '')
+
         return df
     return pd.DataFrame(columns=[
         "id", "wallet_id", "cpf_usuario", "tipo_operacao", "cripto",
         "quantidade", "custo_total", "data_operacao",
         "preco_medio_compra_na_op",
         "lucro_prejuizo_na_op",
-        "ptax_na_op" # Adicionada nova coluna
+        "ptax_na_op",
+        "cripto_display_name" # Adicionada nova coluna
     ])
 
 def save_operacoes(df):
@@ -139,7 +149,6 @@ def load_cryptocurrencies_from_file():
                 if 'current_price_brl' in df_cryptos.columns:
                     df_cryptos['current_price_brl'] = pd.to_numeric(df_cryptos['current_price_brl'], errors='coerce')
                 
-                # Retorna a data de atualização e o DataFrame de criptos
                 return last_updated, df_cryptos
         except json.JSONDecodeError:
             st.error(f"Erro ao decodificar o arquivo {CRYPTOS_FILE}. Verifique o formato JSON.")
@@ -215,7 +224,7 @@ def show_dashboard():
                 st.rerun()
 
         st.markdown("---")
-        if st.button("🔒 Sair"):
+        if st.button("� Sair"):
             st.session_state["logged_in"] = False
             st.session_state["auth_page"] = "login"
             st.session_state["pagina_atual"] = "Portfólio"
@@ -611,8 +620,6 @@ def show_wallet_details():
     if 'current_tipo_operacao' not in st.session_state:
         st.session_state['current_tipo_operacao'] = "Compra"
 
-    # Não precisamos de um on_change aqui, pois o Streamlit já re-executa o script
-    # e o estado será lido na próxima execução.
     tipo_operacao_display = st.radio(
         "Tipo de Operação",
         ["Compra", "Venda"],
@@ -638,6 +645,15 @@ def show_wallet_details():
     # Inicializa o estado para a opção selecionada no selectbox
     if 'selected_crypto_display_name' not in st.session_state:
         st.session_state['selected_crypto_display_name'] = MANUAL_INPUT_OPTION # Padrão para input manual
+    
+    # Callback para o selectbox
+    def handle_crypto_select_change():
+        # Atualiza o estado da sessão com a seleção atual do selectbox
+        st.session_state['selected_crypto_display_name'] = st.session_state.cripto_select_outside_form
+        # Se uma opção da lista for selecionada, limpa o valor do input manual
+        if st.session_state['selected_crypto_display_name'] != MANUAL_INPUT_OPTION:
+            if 'manual_crypto_input_value' in st.session_state:
+                del st.session_state['manual_crypto_input_value']
 
     # O selectbox exibirá as strings de display_name e a opção manual
     selected_display_name = st.selectbox(
@@ -645,11 +661,9 @@ def show_wallet_details():
         options=display_options_with_manual, 
         key="cripto_select_outside_form",
         help="Selecione a criptomoeda para a operação ou insira manualmente.",
-        index=display_options_with_manual.index(st.session_state['selected_crypto_display_name'])
+        index=display_options_with_manual.index(st.session_state['selected_crypto_display_name']),
+        on_change=handle_crypto_select_change # Adiciona o callback aqui
     )
-
-    # Atualiza o estado da sessão com a seleção atual do selectbox
-    st.session_state['selected_crypto_display_name'] = selected_display_name
 
     cripto_symbol = ""
     selected_crypto_for_display = None
@@ -686,17 +700,14 @@ def show_wallet_details():
         else: # Se a opção manual está selecionada mas o campo está vazio
             selected_crypto_for_display = None
             cripto_symbol = ""
-            st.session_state['manual_crypto_input_value'] = "" # Garante que o campo esteja vazio no estado
+            # Não limpa o manual_crypto_input_value aqui para permitir o usuário continuar digitando
     else: # Se uma cripto da lista foi selecionada
         selected_crypto_for_display = display_name_to_crypto_map.get(selected_display_name)
         if selected_crypto_for_display:
             cripto_symbol = selected_crypto_for_display['symbol']
         else:
             cripto_symbol = ""
-        # Limpa o valor do input manual se uma opção da lista for selecionada
-        if 'manual_crypto_input_value' in st.session_state:
-            del st.session_state['manual_crypto_input_value']
-
+        # O valor do input manual já é limpo pelo callback handle_crypto_select_change
 
     # Exibe a logo e o nome completo da criptomoeda selecionada/digitada
     if selected_crypto_for_display:
@@ -787,7 +798,7 @@ def show_wallet_details():
 
         if submitted_op:
             # Validação para garantir que uma criptomoeda foi selecionada ou digitada corretamente
-            if not cripto_symbol or (selected_display_name == MANUAL_INPUT_OPTION and not manual_input_valid):
+            if not selected_crypto_for_display or (selected_display_name == MANUAL_INPUT_OPTION and not manual_input_valid):
                 st.error("Por favor, selecione uma criptomoeda ou insira uma no formato correto (SÍMBOLO - Nome Completo).")
             elif quantidade <= 0 or custo_total_input <= 0:
                 st.error("Por favor, preencha todos os campos da operação corretamente.")
@@ -837,7 +848,8 @@ def show_wallet_details():
                     "wallet_id": wallet_id,
                     "cpf_usuario": user_cpf,
                     "tipo_operacao": current_op_type,
-                    "cripto": str(cripto_symbol), # Garante que o símbolo é salvo como string
+                    "cripto": str(cripto_symbol), # Salva o símbolo (ex: BTC, SOL, MEUCUSTOM)
+                    "cripto_display_name": selected_crypto_for_display['display_name'], # NOVO: Salva o nome de exibição completo
                     "quantidade": float(quantidade), # Garante que a quantidade é salva como float
                     "custo_total": custo_total_final_brl, # Salva o valor já convertido para BRL
                     "data_operacao": data_hora_completa,
@@ -876,7 +888,7 @@ def show_wallet_details():
                 op_details = df_operacoes[df_operacoes['id'] == op_to_confirm_delete_id].iloc[0]
                 # Modificar a exibição da quantidade para usar format_number_br
                 op_info_display = (f"{op_details['tipo_operacao']} de {format_number_br(op_details['quantidade'], decimals=8)} "
-                                f"{op_details['cripto']} ({format_currency_brl(op_details['custo_total'])}) em "
+                                f"{op_details['cripto_display_name']} ({format_currency_brl(op_details['custo_total'])}) em " # Usa cripto_display_name
                                 f"{op_details['data_operacao'].strftime('%d/%m/%Y %H:%M')}")
 
                 st.markdown(f"""
@@ -980,10 +992,8 @@ def show_wallet_details():
                 else "🪙" # Se não encontrar ou a imagem for o emoji padrão, usa o emoji
             )
         )
-        filtered_operations['cripto_text_display'] = filtered_operations['cripto'].apply(
-            lambda symbol: symbol_to_full_crypto_info_map[symbol]['display_name']
-            if symbol in symbol_to_full_crypto_info_map else f"{symbol} - (Cripto Manual)"
-        )
+        # --- NOVO: Usa diretamente a coluna cripto_display_name para exibição ---
+        filtered_operations['cripto_text_display'] = filtered_operations['cripto_display_name']
 
         # Definindo as colunas e seus respectivos ratios (ajustados para a nova coluna "Logo")
         col_names = [
@@ -1009,8 +1019,12 @@ def show_wallet_details():
                 color_tipo = "green" if op_row['tipo_operacao'] == "Compra" else "red"
                 st.markdown(f"<span style='color:{color_tipo}'>{op_row['tipo_operacao']}</span>", unsafe_allow_html=True)
             with cols[1]: # Nova coluna para a Logo
-                st.markdown(op_row['crypto_image_html'], unsafe_allow_html=True)
-            with cols[2]: # Coluna Cripto (apenas o texto)
+                # Se a imagem for o emoji, exibe o emoji diretamente
+                if op_row['crypto_image_html'] == "🪙":
+                    st.markdown("🪙", unsafe_allow_html=True)
+                else:
+                    st.markdown(op_row['crypto_image_html'], unsafe_allow_html=True)
+            with cols[2]: # Coluna Cripto (agora usa o display name)
                 st.write(op_row['cripto_text_display'])
             with cols[3]:
                 # Formatar a quantidade com ponto e vírgula do Brasil
