@@ -442,7 +442,7 @@ def show_wallet_details():
     
     # Carrega os dados de criptomoedas para ter os preços atuais
     last_updated_timestamp, cryptocurrencies_data_df = load_cryptocurrencies_from_file()
-    crypto_prices = {crypto['symbol'].upper(): crypto.get('current_price_brl', 0) for crypto in cryptocurrencies_data_df.to_dict('records')}
+    crypto_prices = {crypto['symbol'].upper(): crypto.get('current_price_brl', 0.0) for crypto in cryptocurrencies_data_df.to_dict('records')}
 
     # Título do Portfólio Consolidado com a data de atualização
     col_portfolio_title, col_update_date_placeholder = st.columns([0.7, 0.3]) # Placeholder para alinhar
@@ -592,7 +592,7 @@ def show_wallet_details():
         portfolio_df = portfolio_df.sort_values(by='POSIÇÃO', ascending=False)
 
         # Definindo as colunas e seus respectivos ratios (REMOVIDAS: Custo Médio e Preço Atual (BRL))
-        col_names_portfolio = ["Logo", "Cripto", "Quantidade", "Custo Total", "Lucro Realizado", "Valor Atual da Posição", "POSIÇÃO"] # RENOMEADO AQUI
+        col_names_portfolio = ["Logo", "Cripto", "Quantidade", "Custo Total (BRL)", "Lucro Realizado (BRL)", "Valor Atual da Posição (BRL)", "POSIÇÃO"] # RENOMEADO E ADICIONADO (BRL)
         cols_ratio_portfolio = [0.07, 0.15, 0.15, 0.15, 0.15, 0.18, 0.15] # Ajustado para 7 colunas
 
         cols_portfolio = st.columns(cols_ratio_portfolio)
