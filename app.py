@@ -527,15 +527,15 @@ def show_wallet_details():
     if not portfolio_df.empty:
         # --- CORREÇÃO: Renomear colunas explicitamente para evitar KeyError e garantir casing ---
         portfolio_df = portfolio_df.reset_index().rename(columns={
-            'index': 'Cripto_Symbol',
-            'display_name': 'Cripto',
-            'image': 'Imagem',
-            'quantidade': 'Quantidade',
-            'custo_total': 'Custo Total',
-            'custo_medio': 'Custo Médio',
-            'lucro_realizado': 'Lucro Realizado',
-            'current_price_brl': 'Preço Atual (BRL)',
-            'valor_atual_posicao': 'Valor Atual da Posição'
+            'index': 'Cripto_Symbol',         # O símbolo original da cripto (do índice)
+            'display_name': 'Cripto',         # O display_name da cripto
+            'image': 'Imagem',                # A URL da imagem ou emoji
+            'quantidade': 'Quantidade',       # A quantidade atual
+            'custo_total': 'Custo Total',     # O custo total
+            'custo_medio': 'Custo Médio',     # O custo médio
+            'lucro_realizado': 'Lucro Realizado', # O lucro realizado
+            'current_price_brl': 'Preço Atual (BRL)', # O preço atual em BRL
+            'valor_atual_posicao': 'Valor Atual da Posição' # O valor atual da posição
         })
         
         portfolio_df = portfolio_df[portfolio_df['Quantidade'] > 0] # Filtrar só as que tem saldo > 0
@@ -653,17 +653,14 @@ def show_wallet_details():
     # Mapeia o display_name para o objeto completo da criptomoeda para fácil recuperação
     display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data_df.to_dict('records')}
 
-    # --- REMOVIDO: Opção de "Inserir manualmente..." ---
-    
     # Inicializa o estado para a opção selecionada no selectbox
-    if 'selected_crypto_display_name' not in st.session_state:
-        # Define a primeira cripto da lista como padrão, se houver
+    # Garante que a opção selecionada esteja sempre na lista de opções válidas
+    if 'selected_crypto_display_name' not in st.session_state or st.session_state['selected_crypto_display_name'] not in display_options:
         st.session_state['selected_crypto_display_name'] = display_options[0] if display_options else None
     
     # Callback para o selectbox
-    def handle_crypto_select_change():
-        # Atualiza o estado da sessão com a seleção atual do selectbox
-        st.session_state['selected_crypto_display_name'] = st.session_state.cripto_select_outside_form
+    def handle_crypto_select_change(selected_value): # CORREÇÃO AQUI: Recebe o valor selecionado
+        st.session_state['selected_crypto_display_name'] = selected_value
 
     # O selectbox exibirá as strings de display_name
     selected_display_name = st.selectbox(
@@ -672,7 +669,8 @@ def show_wallet_details():
         key="cripto_select_outside_form",
         help="Selecione a criptomoeda para a operação.",
         index=display_options.index(st.session_state['selected_crypto_display_name']) if st.session_state['selected_crypto_display_name'] in display_options else 0,
-        on_change=handle_crypto_select_change # Adiciona o callback aqui
+        on_change=handle_crypto_select_change, # Adiciona o callback aqui
+        args=(st.session_state.cripto_select_outside_form,) # Passa o valor do widget para o callback
     )
 
     cripto_symbol = ""
@@ -992,7 +990,7 @@ def show_wallet_details():
             with cols[1]: # Nova coluna para a Logo
                 # Se a imagem for o emoji, exibe o emoji diretamente
                 if op_row['crypto_image_html'] == "🪙":
-                    st.markdown("🪙", unsafe_allow_html=True)
+                    st.markdown("�", unsafe_allow_html=True)
                 else:
                     st.markdown(op_row['crypto_image_html'], unsafe_allow_html=True)
             with cols[2]: # Coluna Cripto (agora usa o display name)
