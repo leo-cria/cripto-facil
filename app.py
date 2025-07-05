@@ -267,7 +267,7 @@ def show_dashboard():
                 atual = st.text_input("Senha atual", type="password")
                 nova = st.text_input("Nova senha", type="password")
                 confirmar = st.text_input("Confirme a senha", type="password")
-                ok = st.form_submit_button("Alterar senha 🔑")
+                ok = st.form_submit_button("Alterar senha �")
                 if ok:
                     if hash_password(atual) != usuario['password_hash']:
                         st.error("Senha atual incorreta.")
@@ -334,7 +334,7 @@ def show_dashboard():
         st.subheader("Minhas carteiras")
         if not user_carteiras_df.empty:
             for _, row in user_carteiras_df.iterrows():
-                with st.expander(f"� {row['nome']} ({row['tipo']}) - Origem: {row['nacional']}", expanded=False):
+                with st.expander(f"🔗 {row['nome']} ({row['tipo']}) - Origem: {row['nacional']}", expanded=False):
                     st.write(f"**Tipo:** {row['tipo']}")
                     st.write(f"**Origem:** {row['nacional']}")
 
@@ -658,92 +658,58 @@ def show_wallet_details():
     # Mapeia o display_name para o objeto completo da criptomoeda para fácil recuperação
     display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data_df.to_dict('records')}
 
-    # Adiciona uma opção para "Inserir manualmente..." no início da lista de display_options
-    MANUAL_INPUT_OPTION = "Inserir manualmente..."
-    display_options_with_manual = [MANUAL_INPUT_OPTION] + display_options
-
+    # --- REMOVIDO: Opção de "Inserir manualmente..." ---
+    # display_options_with_manual = [MANUAL_INPUT_OPTION] + display_options
+    
     # Inicializa o estado para a opção selecionada no selectbox
     if 'selected_crypto_display_name' not in st.session_state:
-        st.session_state['selected_crypto_display_name'] = MANUAL_INPUT_OPTION # Padrão para input manual
+        # Define a primeira cripto da lista como padrão, se houver
+        st.session_state['selected_crypto_display_name'] = display_options[0] if display_options else None
     
     # Callback para o selectbox
     def handle_crypto_select_change():
         # Atualiza o estado da sessão com a seleção atual do selectbox
         st.session_state['selected_crypto_display_name'] = st.session_state.cripto_select_outside_form
-        # Se uma opção da lista for selecionada, limpa o valor do input manual
-        if st.session_state['selected_crypto_display_name'] != MANUAL_INPUT_OPTION:
-            if 'manual_crypto_input_value' in st.session_state:
-                del st.session_state['manual_crypto_input_value']
 
-    # O selectbox exibirá as strings de display_name e a opção manual
+    # O selectbox exibirá as strings de display_name
     selected_display_name = st.selectbox(
         "Criptomoeda", 
-        options=display_options_with_manual, 
+        options=display_options, # Usa apenas as opções da API
         key="cripto_select_outside_form",
-        help="Selecione a criptomoeda para a operação ou insira manualmente.",
-        index=display_options_with_manual.index(st.session_state['selected_crypto_display_name']),
+        help="Selecione a criptomoeda para a operação.",
+        index=display_options.index(st.session_state['selected_crypto_display_name']) if st.session_state['selected_crypto_display_name'] in display_options else 0,
         on_change=handle_crypto_select_change # Adiciona o callback aqui
     )
 
     cripto_symbol = ""
     selected_crypto_for_display = None
-    manual_input_valid = False
-
-    if selected_display_name == MANUAL_INPUT_OPTION:
-        manual_crypto_input = st.text_input(
-            "Insira o Símbolo e Nome (ex: BTC - Bitcoin)",
-            key="manual_crypto_input",
-            value=st.session_state.get('manual_crypto_input_value', '') # Mantém o valor digitado
-        )
-        
-        # Expressão regular para validar o formato "SIMBOLO - Nome Completo"
-        match = re.match(r"^\s*([A-Za-z0-9]+)\s*-\s*(.+)\s*$", manual_crypto_input)
-        
-        if match:
-            manual_symbol = match.group(1).upper()
-            manual_name = match.group(2).strip()
-            
-            selected_crypto_for_display = {
-                'symbol': manual_symbol,
-                'name': manual_name,
-                'image': "🪙", # Emoji de moeda
-                'display_name': f"{manual_symbol} - {manual_name}",
-                'current_price_brl': 0.0 # Preço desconhecido para cripto manual
-            }
-            cripto_symbol = manual_symbol
-            manual_input_valid = True
-            st.session_state['manual_crypto_input_value'] = manual_crypto_input # Atualiza o valor digitado no estado
-        elif manual_crypto_input: # Se algo foi digitado mas não corresponde ao formato
-            st.error("Formato inválido. Use 'SÍMBOLO - Nome Completo' (ex: BTC - Bitcoin).")
-            selected_crypto_for_display = None
-            cripto_symbol = ""
-        else: # Se a opção manual está selecionada mas o campo está vazio
-            selected_crypto_for_display = None
-            cripto_symbol = ""
-            # Não limpa o manual_crypto_input_value aqui para permitir o usuário continuar digitando
-    else: # Se uma cripto da lista foi selecionada
+    
+    # --- Lógica simplificada para obter a cripto selecionada ---
+    if selected_display_name:
         selected_crypto_for_display = display_name_to_crypto_map.get(selected_display_name)
         if selected_crypto_for_display:
             cripto_symbol = selected_crypto_for_display['symbol']
         else:
+            # Fallback se por algum motivo a cripto não for encontrada no mapa (improvável com a nova lógica)
             cripto_symbol = ""
-        # O valor do input manual já é limpo pelo callback handle_crypto_select_change
+            st.error("Criptomoeda selecionada não encontrada na lista de dados.")
 
-    # Exibe a logo e o nome completo da criptomoeda selecionada/digitada
+    # Exibe a logo e o nome completo da criptomoeda selecionada
     if selected_crypto_for_display:
-        if selected_crypto_for_display['image'] == "🪙":
-            st.markdown(
-                f"🪙 **{selected_crypto_for_display['symbol']}** - {selected_crypto_for_display['name']}",
-                unsafe_allow_html=True
-            )
-        else:
+        # Verifica se a imagem da API é válida ou se é o emoji padrão
+        if selected_crypto_for_display['image'] and selected_crypto_for_display['image'] != "🪙":
             st.markdown(
                 f"<img src='{selected_crypto_for_display['image']}' width='30' height='30' style='vertical-align:middle; margin-right:10px;'> "
                 f"**{selected_crypto_for_display['symbol']}** - {selected_crypto_for_display['name']}", 
                 unsafe_allow_html=True
             )
+        else: # Se a imagem for o emoji padrão ou vazia
+            st.markdown(
+                f"🪙 **{selected_crypto_for_display['symbol']}** - {selected_crypto_for_display['name']}",
+                unsafe_allow_html=True
+            )
     else:
-        st.markdown("<p style='color:orange;'>Selecione ou insira uma criptomoeda para ver os detalhes.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:orange;'>Selecione uma criptomoeda para ver os detalhes.</p>", unsafe_allow_html=True)
 
 
     # Inicializa os valores do formulário no session_state se não existirem
@@ -817,9 +783,9 @@ def show_wallet_details():
         submitted_op = st.form_submit_button("Registrar Operação ✅")
 
         if submitted_op:
-            # Validação para garantir que uma criptomoeda foi selecionada ou digitada corretamente
-            if not selected_crypto_for_display or (selected_display_name == MANUAL_INPUT_OPTION and not manual_input_valid):
-                st.error("Por favor, selecione uma criptomoeda ou insira uma no formato correto (SÍMBOLO - Nome Completo).")
+            # Validação para garantir que uma criptomoeda foi selecionada
+            if not selected_crypto_for_display:
+                st.error("Por favor, selecione uma criptomoeda.")
             elif quantidade <= 0 or custo_total_input <= 0:
                 st.error("Por favor, preencha todos os campos da operação corretamente.")
             elif is_foreign_wallet and ptax_input <= 0:
@@ -889,10 +855,8 @@ def show_wallet_details():
                 st.session_state['data_op_input_value'] = datetime.today().date()
                 st.session_state['hora_op_input_value'] = datetime.now().time()
                 
-                # Resetar a seleção de cripto para "Inserir manualmente..." após o registro
-                st.session_state['selected_crypto_display_name'] = MANUAL_INPUT_OPTION
-                if 'manual_crypto_input_value' in st.session_state:
-                    del st.session_state['manual_crypto_input_value'] # Limpa o campo de input manual
+                # Resetar a seleção de cripto para a primeira opção da lista após o registro
+                st.session_state['selected_crypto_display_name'] = display_options[0] if display_options else None
                 
                 st.rerun()
 
@@ -1008,14 +972,14 @@ def show_wallet_details():
         )
         filtered_operations['cripto_text_display'] = filtered_operations['cripto_display_name']
 
-        # Definindo as colunas e seus respectivos ratios (ajustados para a nova coluna "Logo")
+        # Definindo as colunas e seus respectivos ratios (ajustados para a nova coluna "Logo" e "Origem")
         col_names = [
             "Tipo", "Logo", "Cripto", "Qtd.", "PTAX",
             "Valor Total (USDT)", "Valor Total (BRL)", "P. Médio Compra",
             "P. Médio Venda", "Lucro/Prejuízo", "Data/Hora", "Origem", "Ações"
         ]
-        # Ajustando os ratios das colunas para caber na tela
-        cols_ratio = [0.05, 0.04, 0.10, 0.08, 0.06, 0.09, 0.09, 0.09, 0.09, 0.09, 0.08, 0.06, 0.08] 
+        # Ajustando os ratios das colunas para caber na tela, 'Origem' aumentada
+        cols_ratio = [0.05, 0.04, 0.10, 0.08, 0.06, 0.09, 0.09, 0.09, 0.09, 0.09, 0.08, 0.07, 0.07] 
 
         cols = st.columns(cols_ratio)
         for i, col_name in enumerate(col_names):
