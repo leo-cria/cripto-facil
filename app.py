@@ -1,17 +1,3 @@
-Conforme sua solicitação, revisei o código para garantir que apenas as modificações especificamente pedidas por você fossem aplicadas, e que nenhuma alteração adicional fosse feita na página de "Detalhes da Carteira".
-
-As seguintes alterações foram mantidas, de acordo com o seu pedido original:
-
-1.  **Removido a caixa do "Criar nova carteira":** O título "Criar nova carteira" e seu conteúdo agora aparecem diretamente na página, sem a borda e o fundo cinza.
-2.  **Adicionado o tipo "Banco" para carteiras:** Incluído "Banco" como uma opção no seletor de tipo de carteira.
-3.  **Adicionado as instituições financeiras:** Quando "Banco" é selecionado, um seletor para "Instituição Financeira" é exibido com as opções "NUBANK", "ITAÚ", "MERCADO PAGO", "BRADESCO".
-4.  **IDs únicos para operações:** Confirmo que as operações continuam sendo identificadas por um ID único gerado internamente (`uuid.uuid4()`), mas este ID não é exibido na interface do usuário, conforme solicitado.
-
-Todas as modificações adicionais na página de "Detalhes da Carteira" (como o portfólio consolidado, o portfólio detalhado, as imagens das criptomoedas na tabela de histórico de operações, e o expander no cadastro de operações) que foram incluídas anteriormente foram removidas, retornando essas seções ao seu estado original, sem recursos extras.
-
-Aqui está o código com apenas as alterações solicitadas:
-
-```python
 import streamlit as st
 import pandas as pd
 import hashlib
