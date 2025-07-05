@@ -252,28 +252,46 @@ def show_dashboard():
     if page == "Minha Conta":
         df = load_users()
         usuario = df[df['cpf'] == st.session_state["cpf"]].iloc[0]
-        with st.form("form_account"):
-            st.text_input("Nome", value=usuario['name'], disabled=True)
-            st.text_input("CPF", value=usuario['cpf'], disabled=True)
-            phone = st.text_input("Telefone", value=usuario['phone'])
-            email = st.text_input("Email", value=usuario['email'])
-            submitted = st.form_submit_button("Salvar alterações ✅")
-            if submitted:
-                df.loc[df['cpf'] == usuario['cpf'], ['phone', 'email']] = phone, email
-                save_users(df)
-                st.success("Dados atualizados!")
+
+        # --- Alterar dados cadastrais com expander e confirmação de senha ---
+        with st.expander("Alterar Dados Cadastrais", expanded=False):
+            with st.form("form_account"):
+                st.text_input("Nome", value=usuario['name'], disabled=True)
+                st.text_input("CPF", value=usuario['cpf'], disabled=True)
+                phone = st.text_input("Telefone", value=usuario['phone'])
+                email = st.text_input("Email", value=usuario['email'])
+                
+                # NOVO: Campo para confirmação de senha
+                confirm_password_change = st.text_input("Confirme sua senha atual para salvar", type="password")
+
+                submitted = st.form_submit_button("Salvar alterações ✅")
+                if submitted:
+                    # NOVO: Verificar a senha antes de salvar
+                    if hash_password(confirm_password_change) != usuario['password_hash']:
+                        st.error("Senha atual incorreta. As alterações não foram salvas.")
+                    else:
+                        df.loc[df['cpf'] == usuario['cpf'], ['phone', 'email']] = phone, email
+                        save_users(df)
+                        st.success("Dados atualizados com sucesso!")
+                        # Opcional: Limpar o campo de senha após sucesso
+                        st.session_state['confirm_password_change_value'] = "" # Resetar o valor do input da senha de confirmação
+                        st.rerun() # Recarregar para limpar o campo de senha
+            
+            # Resetar o valor do input da senha de confirmação (fora do form, mas lida com o estado)
+            if 'confirm_password_change_value' not in st.session_state:
+                st.session_state['confirm_password_change_value'] = "" # Inicializa se não existir
 
         with st.expander("Alterar senha"):
             with st.form("form_password"):
                 atual = st.text_input("Senha atual", type="password")
                 nova = st.text_input("Nova senha", type="password")
-                confirmar = st.text_input("Confirme a senha", type="password")
+                confirmar = st.text_input("Confirme a nova senha", type="password") # Alterado para "Confirme a nova senha"
                 ok = st.form_submit_button("Alterar senha 🔑")
                 if ok:
                     if hash_password(atual) != usuario['password_hash']:
                         st.error("Senha atual incorreta.")
                     elif nova != confirmar:
-                        st.error("Nova senha não confere.")
+                        st.error("Novas senhas não coincidem.") # Alterado para "Novas senhas não coincidem"
                     else:
                         df.loc[df['cpf'] == usuario['cpf'], 'password_hash'] = hash_password(nova)
                         save_users(df)
@@ -1150,3 +1168,4 @@ if st.session_state["logged_in"]:
     show_dashboard()
 else:
     show_login()
+    
