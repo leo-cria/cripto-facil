@@ -35,7 +35,7 @@ def save_users(df):
     df.to_csv(USERS_FILE, index=False)
 
 def hash_password(password):
-    """Gera um hash SHA256 do password fornecida para armazenamento seguro."""
+    """Gera um hash SHA256 da senha fornecida para armazenamento seguro."""
     return hashlib.sha256(password.encode()).hexdigest()
 
 def send_recovery_code(email):
@@ -117,11 +117,6 @@ def load_operacoes():
         else:
             df['cripto_image_url'] = df['cripto_image_url'].astype(str).replace('nan', '🪙')
 
-        # --- NOVO: Garante que a coluna 'referencia_transacao' exista ---
-        if 'referencia_transacao' not in df.columns:
-            df['referencia_transacao'] = ""
-        else:
-            df['referencia_transacao'] = df['referencia_transacao'].astype(str).replace('nan', '')
 
         return df
     return pd.DataFrame(columns=[
@@ -131,8 +126,7 @@ def load_operacoes():
         "lucro_prejuizo_na_op",
         "ptax_na_op",
         "cripto_display_name", # Adicionada nova coluna
-        "cripto_image_url", # Adicionada nova coluna
-        "referencia_transacao" # Adicionada nova coluna
+        "cripto_image_url" # Adicionada nova coluna
     ])
 
 def save_operacoes(df):
@@ -579,50 +573,46 @@ def show_wallet_details():
         for cripto_simbolo in wallet_ops_for_portfolio['cripto'].unique():
             ops_cripto = wallet_ops_for_portfolio[wallet_ops_for_portfolio['cripto'] == cripto_simbolo]
 
-            # Considera "Recebimento" como aumento e "Envio" como diminuição da quantidade
-            qtd_comprada_ou_recebida = ops_cripto[
-                (ops_cripto['tipo_operacao'] == 'Compra') | 
-                (ops_cripto['tipo_operacao'] == 'Recebimento')
-            ]['quantidade'].sum()
-            
-            qtd_vendida_ou_enviada = ops_cripto[
-                (ops_cripto['tipo_operacao'] == 'Venda') | 
-                (ops_cripto['tipo_operacao'] == 'Envio')
-            ]['quantidade'].sum()
-            
-            quantidade_atual = qtd_comprada_ou_recebida - qtd_vendida_ou_enviada
+            qtd_comprada = ops_cripto[ops_cripto['tipo_operacao'] == 'Compra']['quantidade'].sum()
+            qtd_vendida = ops_cripto[ops_cripto['tipo_operacao'] == 'Venda']['quantidade'].sum()
+            quantidade_atual = qtd_comprada - qtd_vendida
 
             if quantidade_atual > 0:
-                # O custo total e custo base vendido ainda são apenas de Compra/Venda
                 total_custo_comprado = ops_cripto[ops_cripto['tipo_operacao'] == 'Compra']['custo_total'].sum()
+
                 total_custo_base_vendido = 0
                 vendas_da_cripto = ops_cripto[ops_cripto['tipo_operacao'] == 'Venda']
                 if not vendas_da_cripto.empty:
+                    # O custo base vendido é a quantidade vendida vezes o preço médio de compra na operação
                     total_custo_base_vendido = (vendas_da_cripto['quantidade'] * vendas_da_cripto['preco_medio_compra_na_op']).sum()
 
+                # Custo total das unidades remanescentes na carteira
                 custo_total_atual_estimado = total_custo_comprado - total_custo_base_vendido
-                
+
                 if quantidade_atual > 0:
                     custo_medio = custo_total_atual_estimado / quantidade_atual
                 else:
                     custo_medio = 0
 
                 lucro_realizado_cripto = ops_cripto[
-                    (ops_cripto['tipo_operacao'] == 'Venda') & 
+                    (ops_cripto['tipo_operacao'] == 'Venda') &
                     (pd.notna(ops_cripto['lucro_prejuizo_na_op']))
                 ]['lucro_prejuizo_na_op'].sum()
 
-                current_price = crypto_prices.get(cripto_simbolo.upper(), 0.0)
+                # Obter o preço atual da criptomoeda
+                current_price = crypto_prices.get(cripto_simbolo.upper(), 0.0) # Garante que é float
                 valor_atual_posicao = quantidade_atual * current_price
-                total_valor_atual_carteira += valor_atual_posicao
+                total_valor_atual_carteira += valor_atual_posicao # Adiciona ao total da carteira
 
+                # --- NOVO: Pega o display_name e image_url da última operação registrada para essa cripto ---
+                # Isso garante que o nome e imagem exibidos no portfólio correspondam ao que foi salvo na operação
                 last_op_for_crypto = ops_cripto.sort_values(by='data_operacao', ascending=False).iloc[0]
                 display_name_for_portfolio = last_op_for_crypto['cripto_display_name']
                 image_url_for_portfolio = last_op_for_crypto['cripto_image_url']
-
+                
                 portfolio_detail[cripto_simbolo] = {
-                    'display_name': display_name_for_portfolio,
-                    'image': image_url_for_portfolio,
+                    'display_name': display_name_for_portfolio, # Usa o display_name da operação
+                    'image': image_url_for_portfolio, # Usa a image_url da operação
                     'quantidade': float(quantidade_atual),
                     'custo_total': float(custo_total_atual_estimado),
                     'custo_medio': float(custo_medio),
@@ -630,559 +620,611 @@ def show_wallet_details():
                     'current_price_brl': float(current_price),
                     'valor_atual_posicao': float(valor_atual_posicao)
                 }
-    
+
+    # Criar DataFrame para o portfólio detalhado
     portfolio_df = pd.DataFrame.from_dict(portfolio_detail, orient='index')
     if not portfolio_df.empty:
+        # --- CORREÇÃO: Renomear colunas explicitamente para evitar KeyError e garantir casing ---
         portfolio_df = portfolio_df.reset_index().rename(columns={
-            'index': 'Cripto_Symbol',
-            'display_name': 'Cripto',
-            'image': 'Logo',
-            'quantidade': 'Quantidade',
-            'custo_total': 'Custo Total',
-            'custo_medio': 'Custo Médio',
-            'lucro_realizado': 'Lucro Realizado',
-            'current_price_brl': 'Preço Atual (BRL)',
-            'valor_atual_posicao': 'Valor Atual da Posição'
+            'index': 'Cripto_Symbol',         # O símbolo original da cripto (do índice)
+            'display_name': 'Cripto',         # O display_name da cripto
+            'image': 'Logo',                # A URL da imagem ou emoji (RENOMEADO)
+            'quantidade': 'Quantidade',       # A quantidade atual
+            'custo_total': 'Custo Total',     # O custo total
+            'custo_medio': 'Custo Médio',     # O custo médio
+            'lucro_realizado': 'Lucro Realizado', # O lucro realizado
+            'current_price_brl': 'Preço Atual (BRL)', # O preço atual em BRL
+            'valor_atual_posicao': 'Valor Atual da Posição' # O valor atual da posição
         })
-        portfolio_df = portfolio_df[portfolio_df['Quantidade'] > 0]
+        
+        portfolio_df = portfolio_df[portfolio_df['Quantidade'] > 0] # Filtrar só as que tem saldo > 0
+
+        # Calcular o Custo Total da Carteira com base no portfolio_df filtrado
         total_custo_carteira_atualizado = portfolio_df['Custo Total'].sum()
     else:
         total_custo_carteira_atualizado = 0.0
 
+    # Exibir as métricas em texto
     col_custo, col_lucro, col_valor_atual = st.columns(3)
     with col_custo:
         st.markdown(
-            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Custo Total da Carteira (Ativo) (BRL)</p>"
-            f"<p style='text-align: center; font-size: 24px; font-weight: bold;'>{format_currency_brl(total_custo_carteira_atualizado)}</p>", unsafe_allow_html=True
+            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Custo Total da Carteira (Ativo) (BRL)</p>" # Adicionado (BRL)
+            f"<p style='text-align: center; font-size: 24px; font-weight: bold;'>{format_currency_brl(total_custo_carteira_atualizado)}</p>",
+            unsafe_allow_html=True
         )
     with col_lucro:
+        # Aplicar cor ao Lucro Realizado Total da Carteira
         color_lucro_total = "green" if total_lucro_realizado > 0 else ("red" if total_lucro_realizado < 0 else "black")
         st.markdown(
-            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Lucro Realizado Total da Carteira (BRL)</p>"
-            f"<p style='text-align: center; color: {color_lucro_total}; font-size: 24px; font-weight: bold;'>{format_currency_brl(total_lucro_realizado)}</p>", unsafe_allow_html=True
+            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Lucro Realizado Total da Carteira (BRL)</p>" # Adicionado (BRL)
+            f"<p style='text-align: center; color: {color_lucro_total}; font-size: 24px; font-weight: bold;'>{format_currency_brl(total_lucro_realizado)}</p>", 
+            unsafe_allow_html=True
         )
     with col_valor_atual:
         st.markdown(
-            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Valor Atual da Carteira (BRL)</p>"
-            f"<p style='text-align: center; font-size: 24px; font-weight: bold;'>{format_currency_brl(total_valor_atual_carteira)}</p>", unsafe_allow_html=True
+            f"<p style='text-align: center; font-size: 18px; margin-bottom: 0;'>Valor Atual da Carteira (BRL)</p>" # Adicionado (BRL)
+            f"<p style='text-align: center; font-size: 24px; font-weight: bold;'>{format_currency_brl(total_valor_atual_carteira)}</p>",
+            unsafe_allow_html=True
         )
-    
-    if last_updated_timestamp:
-        try:
-            updated_dt = datetime.fromisoformat(last_updated_timestamp)
-            st.markdown(f"<p style='text-align: center; font-size: 14px; margin-top: 5px;'>Última atualização de preços: {updated_dt.strftime('%d/%m/%Y %H:%M:%S')}</p>", unsafe_allow_html=True)
-        except ValueError:
-            st.markdown("<p style='text-align: center; font-size: 14px; margin-top: 5px;'>Data de atualização de preços não disponível.</p>", unsafe_allow_html=True)
-    else:
-        st.markdown("<p style='text-align: center; font-size: 14px; margin-top: 5px;'>Data de atualização de preços não disponível.</p>", unsafe_allow_html=True)
+        # --- NOVO: Alinhamento da data de atualização ---
+        if last_updated_timestamp:
+            try:
+                updated_dt = datetime.fromisoformat(last_updated_timestamp)
+                st.markdown(f"<p style='text-align: center; font-size: 14px; margin-top: 5px;'>Atualizado em: {updated_dt.strftime('%d/%m/%Y')}</p>", unsafe_allow_html=True)
+            except ValueError:
+                st.markdown("<p style='text-align: center; font-size: 14px; margin-top: 5px;'>Data de atualização não disponível.</p>", unsafe_allow_html=True)
+        else:
+            st.markdown("<p style='text-align: center; font-size: 14px; margin-top: 5px;'>Data de atualização não disponível.</p>", unsafe_allow_html=True)
 
 
+    st.markdown("---")
+    st.markdown("#### Portfolio Atual Detalhado")
     if not portfolio_df.empty:
-        st.markdown("##### Detalhes do Portfólio por Cripto")
-        # Colunas a serem exibidas na tabela
-        display_columns = [
-            'Logo', 'Cripto', 'Quantidade', 'Custo Médio', 'Custo Total', 
-            'Preço Atual (BRL)', 'Valor Atual da Posição', 'Lucro Realizado'
-        ]
+        # Calcular a coluna POSIÇÃO
+        if total_valor_atual_carteira > 0:
+            portfolio_df['POSIÇÃO'] = (portfolio_df['Valor Atual da Posição'] / total_valor_atual_carteira) * 100
+        else:
+            portfolio_df['POSIÇÃO'] = 0.0
 
-        # Formatação para exibição na tabela
-        portfolio_display_df = portfolio_df[display_columns].copy()
-        portfolio_display_df['Quantidade'] = portfolio_display_df['Quantidade'].apply(lambda x: format_number_br(x, 8)) # Mais precisão
-        portfolio_display_df['Custo Médio'] = portfolio_display_df['Custo Médio'].apply(format_currency_brl)
-        portfolio_display_df['Custo Total'] = portfolio_display_df['Custo Total'].apply(format_currency_brl)
-        portfolio_display_df['Preço Atual (BRL)'] = portfolio_display_df['Preço Atual (BRL)'].apply(format_currency_brl)
-        portfolio_display_df['Valor Atual da Posição'] = portfolio_display_df['Valor Atual da Posição'].apply(format_currency_brl)
-        portfolio_display_df['Lucro Realizado'] = portfolio_display_df['Lucro Realizado'].apply(format_currency_brl)
+        # --- NOVO: Ordenar por 'POSIÇÃO' em ordem decrescente ---
+        portfolio_df = portfolio_df.sort_values(by='POSIÇÃO', ascending=False)
 
-        # Para exibir imagens na coluna 'Logo'
-        st.dataframe(
-            portfolio_display_df,
-            column_config={
-                "Logo": st.column_config.ImageColumn("Logo", help="Logo da Criptomoeda", width="small"),
-                "Cripto": st.column_config.Column("Criptomoeda", width="medium"),
-                "Quantidade": st.column_config.Column("Quantidade", width="small"),
-                "Custo Médio": st.column_config.Column("Custo Médio", width="small"),
-                "Custo Total": st.column_config.Column("Custo Total", width="small"),
-                "Preço Atual (BRL)": st.column_config.Column("Preço Atual (BRL)", width="small"),
-                "Valor Atual da Posição": st.column_config.Column("Valor Atual da Posição", width="small"),
-                "Lucro Realizado": st.column_config.Column("Lucro Realizado", width="small")
-            },
-            hide_index=True,
-            use_container_width=True
-        )
+        # Definindo as colunas e seus respectivos ratios (REMOVIDAS: Custo Médio e Preço Atual (BRL))
+        col_names_portfolio = ["Logo", "Cripto", "Quantidade", "Custo Total (BRL)", "Lucro Realizado (BRL)", "Valor Atual da Posição (BRL)", "POSIÇÃO"] # RENOMEADO E ADICIONADO (BRL)
+        cols_ratio_portfolio = [0.07, 0.15, 0.15, 0.15, 0.15, 0.18, 0.15] # Ajustado para 7 colunas
+
+        cols_portfolio = st.columns(cols_ratio_portfolio)
+        for i, col_name in enumerate(col_names_portfolio):
+            with cols_portfolio[i]:
+                st.markdown(f"**{col_name}**")
+        st.markdown("---")
+
+        for idx, row in portfolio_df.iterrows():
+            cols_portfolio = st.columns(cols_ratio_portfolio)
+            with cols_portfolio[0]: # Coluna Logo
+                if row['Logo'] == "🪙": # Se for o emoji, exibe o emoji
+                    st.markdown("🪙", unsafe_allow_html=True)
+                elif row['Logo']:
+                    st.markdown(f"<img src='{row['Logo']}' width='24' height='24'>", unsafe_allow_html=True)
+                else:
+                    st.write("➖")
+            with cols_portfolio[1]: # Coluna Cripto
+                st.write(row['Cripto'])
+            with cols_portfolio[2]:
+                # Formatar a quantidade com ponto e vírgula do Brasil
+                st.write(format_number_br(row['Quantidade'], decimals=8))
+            with cols_portfolio[3]: # Custo Total
+                st.write(format_currency_brl(row['Custo Total']))
+            with cols_portfolio[4]: # Lucro Realizado
+                color = "green" if row['Lucro Realizado'] >= 0 else "red"
+                st.markdown(f"<span style='color:{color}'>{format_currency_brl(row['Lucro Realizado'])}</span>", unsafe_allow_html=True)
+            with cols_portfolio[5]: # Valor Atual da Posição
+                st.write(format_currency_brl(row['Valor Atual da Posição']))
+            with cols_portfolio[6]: # POSIÇÃO
+                st.write(f"{format_number_br(row['POSIÇÃO'], decimals=2)}%")
+        st.markdown("---")
     else:
-        st.info("Nenhuma criptomoeda no portfólio desta carteira ainda.")
+        st.info("Sua carteira não possui criptomoedas atualmente (todas as compras foram compensadas por vendas ou não há operações registradas com saldo positivo).")
+
 
     st.markdown("---")
 
-    # --- Registro de Nova Operação ---
-    st.markdown("#### Registrar Nova Operação")
-    with st.expander("➕ Nova Operação"):
-        with st.form("form_add_operacao"):
-            tipo_operacao = st.radio(
-                "Tipo de Operação",
-                ["Compra", "Venda", "Envio", "Recebimento"], # Adicionado 'Envio' e 'Recebimento'
-                key="tipo_op_radio_detail",
-                horizontal=True
+    # --- Seção de cadastro de nova operação dentro de um expander (INICIA FECHADO) ---
+    with st.expander("➕ Cadastrar Nova Operação", expanded=False): # MODIFICADO AQUI
+        if 'current_tipo_operacao' not in st.session_state:
+            st.session_state['current_tipo_operacao'] = "Compra"
+
+        tipo_operacao_display = st.radio(
+            "Tipo de Operação",
+            ["Compra", "Venda"],
+            horizontal=True,
+            key="tipo_op_radio_external",
+            index=["Compra", "Venda"].index(st.session_state['current_tipo_operacao'])
+        )
+        st.session_state['current_tipo_operacao'] = tipo_operacao_display # Garante que o estado é atualizado
+
+        # Carrega a lista de dicionários de criptomoedas
+        _, cryptocurrencies_data_df = load_cryptocurrencies_from_file()
+        
+        # Cria uma lista de strings para exibição no selectbox (apenas o display_name)
+        display_options = cryptocurrencies_data_df['display_name'].tolist()
+        
+        # Mapeia o display_name para o objeto completo da criptomoeda para fácil recuperação
+        display_name_to_crypto_map = {crypto['display_name']: crypto for crypto in cryptocurrencies_data_df.to_dict('records')}
+
+        # Inicializa o estado para a opção selecionada no selectbox
+        # Garante que a opção selecionada esteja sempre na lista de opções válidas
+        if 'selected_crypto_display_name' not in st.session_state or st.session_state['selected_crypto_display_name'] not in display_options:
+            st.session_state['selected_crypto_display_name'] = display_options[0] if display_options else None
+        
+        # Callback para o selectbox
+        def handle_crypto_select_change(): # Removido 'selected_value' como argumento
+            st.session_state['selected_crypto_display_name'] = st.session_state.cripto_select_outside_form
+
+        # O selectbox exibirá as strings de display_name
+        selected_display_name = st.selectbox(
+            "Criptomoeda", 
+            options=display_options, # Usa apenas as opções da API
+            key="cripto_select_outside_form",
+            help="Selecione a criptomoeda para a operação.",
+            index=display_options.index(st.session_state['selected_crypto_display_name']) if st.session_state['selected_crypto_display_name'] in display_options else 0,
+            on_change=handle_crypto_select_change # Removido 'args'
+        )
+
+        cripto_symbol = ""
+        selected_crypto_for_display = None
+        
+        # --- Lógica simplificada para obter a cripto selecionada ---
+        if selected_display_name:
+            selected_crypto_for_display = display_name_to_crypto_map.get(selected_display_name)
+            if selected_crypto_for_display:
+                cripto_symbol = selected_crypto_for_display['symbol']
+            else:
+                # Fallback se por algum motivo a cripto não for encontrada no mapa (improvável com a nova lógica)
+                cripto_symbol = ""
+                st.error("Criptomoeda selecionada não encontrada na lista de dados.")
+
+        # Exibe a logo e o nome completo da criptomoeda selecionada
+        if selected_crypto_for_display:
+            # Verifica se a imagem da API é válida ou se é o emoji padrão
+            if selected_crypto_for_display['image'] and selected_crypto_for_display['image'] != "🪙":
+                st.markdown(
+                    f"<img src='{selected_crypto_for_display['image']}' width='30' height='30' style='vertical-align:middle; margin-right:10px;'> "
+                    f"**{selected_crypto_for_display['symbol']}** - {selected_crypto_for_display['name']}", 
+                    unsafe_allow_html=True
+                )
+            else: # Se a imagem for o emoji padrão ou vazia
+                st.markdown(
+                    f"🪙 **{selected_crypto_for_display['symbol']}** - {selected_crypto_for_display['name']}",
+                    unsafe_allow_html=True
+                )
+        else:
+            st.markdown("<p style='color:orange;'>Selecione uma criptomoeda para ver os detalhes.</p>", unsafe_allow_html=True)
+
+
+        # Inicializa os valores do formulário no session_state se não existirem
+        if 'quantidade_input_value' not in st.session_state:
+            st.session_state['quantidade_input_value'] = 0.00000001
+        if 'custo_total_input_value' not in st.session_state:
+            st.session_state['custo_total_input_value'] = 0.01
+        if 'ptax_input_value' not in st.session_state:
+            st.session_state['ptax_input_value'] = 5.00
+        if 'data_op_input_value' not in st.session_state:
+            st.session_state['data_op_input_value'] = datetime.today().date()
+        if 'hora_op_input_value' not in st.session_state:
+            st.session_state['hora_op_input_value'] = datetime.now().time()
+
+        with st.form("form_nova_operacao"):
+            current_op_type = st.session_state['current_tipo_operacao']
+
+            # Campos do formulário usando as chaves do session_state para seus valores
+            quantidade = st.number_input(
+                "Quantidade", 
+                min_value=0.00000001, 
+                format="%.8f", 
+                key="quantidade_input_form", # Chave específica para o widget dentro do form
+                value=st.session_state['quantidade_input_value']
             )
 
-            # Carrega a lista de criptomoedas disponíveis para seleção
-            cryptos_for_select = [""] + sorted(cryptocurrencies_data_df['display_name'].tolist())
-            selected_crypto_display_name = st.selectbox(
-                "Selecione a Criptomoeda",
-                cryptos_for_select,
-                key="select_crypto_op"
-            )
-            
-            # Pega o símbolo da cripto selecionada
-            selected_crypto_symbol = ""
-            selected_crypto_image_url = "🪙" # Default emoji
-            if selected_crypto_display_name:
-                crypto_row = cryptocurrencies_data_df[cryptocurrencies_data_df['display_name'] == selected_crypto_display_name]
-                if not crypto_row.empty:
-                    selected_crypto_symbol = crypto_row['symbol'].iloc[0]
-                    selected_crypto_image_url = crypto_row['image'].iloc[0]
+            valor_label_base = ""
+            if is_foreign_wallet:
+                valor_label_base = "Custo Total (em USDT)" if current_op_type == "Compra" else "Total da Venda (em USDT)"
+            else:
+                valor_label_base = "Custo Total (em BRL)" if current_op_type == "Compra" else "Total da Venda (em BRL)"
 
-            quantidade_op = st.number_input(
-                "Quantidade",
-                min_value=0.00000001, # Mínimo para quantidades
-                format="%.8f", # Mais casas decimais para criptos
-                key="quantidade_op"
+            custo_total_input = st.number_input(
+                valor_label_base, 
+                min_value=0.01, 
+                format="%.2f", 
+                key="custo_total_input_form", # Chave específica para o widget dentro do form
+                value=st.session_state['custo_total_input_value']
             )
 
-            custo_total_op = 0.0 # Inicializa como 0.0
+            ptax_input = 1.0 # Default para carteiras nacionais, ou se não for informada
+            valor_em_brl_preview = 0.0
 
-            if tipo_operacao in ["Compra", "Venda"]:
-                custo_total_op = st.number_input(
-                    "Custo Total (BRL)",
+            if is_foreign_wallet:
+                ptax_input = st.number_input(
+                    "Taxa PTAX (BRL por USDT)",
                     min_value=0.01,
-                    format="%.2f",
-                    key="custo_total_op"
+                    format="%.4f",
+                    key="ptax_input_form", # Chave específica para o widget dentro do form
+                    value=st.session_state['ptax_input_value']
                 )
-            
-            # Novo campo para referência da transação (opcional para Envio/Recebimento)
-            referencia_transacao_op = ""
-            if tipo_operacao in ["Envio", "Recebimento"]:
-                referencia_transacao_op = st.text_input(
-                    "Referência da Transação (Opcional)",
-                    help="Ex: ID da transação na blockchain, hash, etc.",
-                    key="referencia_transacao_op"
-                )
+                valor_em_brl_preview = custo_total_input * ptax_input 
+            else:
+                valor_em_brl_preview = custo_total_input
 
-            data_operacao_op = st.date_input(
-                "Data da Operação",
-                value="today",
-                key="data_op"
+
+            data_operacao = st.date_input(
+                "Data da Operação", 
+                key="data_op_input_form", # Chave específica para o widget dentro do form
+                value=st.session_state['data_op_input_value'],
+                min_value=date(2000, 1, 1), # Ano mínimo
+                max_value=date(2100, 12, 31), # Ano máximo
+                format="DD/MM/YYYY" # Formato de exibição
+            )
+            hora_operacao = st.time_input(
+                "Hora da Operação", 
+                key="hora_op_input_form", # Chave específica para o widget dentro do form
+                value=st.session_state['hora_op_input_value']
             )
 
-            submit_op = st.form_submit_button("Registrar Operação")
+            submitted_op = st.form_submit_button("Registrar Operação ✅")
 
-            if submit_op:
-                if not selected_crypto_display_name:
+            if submitted_op:
+                # Validação para garantir que uma criptomoeda foi selecionada
+                if not selected_crypto_for_display:
                     st.error("Por favor, selecione uma criptomoeda.")
-                elif quantidade_op <= 0:
-                    st.error("A quantidade deve ser maior que zero.")
-                elif tipo_operacao in ["Compra", "Venda"] and custo_total_op <= 0:
-                    st.error("O custo total deve ser maior que zero para operações de Compra ou Venda.")
+                elif quantidade <= 0 or custo_total_input <= 0:
+                    st.error("Por favor, preencha todos os campos da operação corretamente.")
+                elif is_foreign_wallet and ptax_input <= 0:
+                    st.error("Por favor, informe uma taxa PTAX válida para carteiras estrangeiras.")
                 else:
-                    df_operacoes = load_operacoes()
-                    
-                    preco_medio_compra_na_op = None
-                    lucro_prejuizo_na_op = None
+                    data_hora_completa = datetime.combine(data_operacao, hora_operacao)
 
-                    if tipo_operacao == "Compra":
-                        # Calcule o preço médio de compra (não o acumulado, mas o desta operação)
-                        preco_medio_compra_na_op = custo_total_op / quantidade_op
-                    elif tipo_operacao == "Venda":
-                        # Para Venda, precisamos calcular o lucro/prejuízo
-                        # 1. Obter o custo médio ponderado da cripto nesta carteira antes da venda
-                        ops_anteriores = df_operacoes[
-                            (df_operacoes['wallet_id'] == wallet_id) &
-                            (df_operacoes['cpf_usuario'] == user_cpf) &
-                            (df_operacoes['cripto'] == selected_crypto_symbol) &
-                            ((df_operacoes['tipo_operacao'] == 'Compra') | (df_operacoes['tipo_operacao'] == 'Recebimento'))
-                        ].copy()
+                    df_operacoes_existentes = load_operacoes()
 
-                        qtd_acumulada = ops_anteriores[
-                            (ops_anteriores['tipo_operacao'] == 'Compra') | 
-                            (ops_anteriores['tipo_operacao'] == 'Recebimento')
-                        ]['quantidade'].sum()
-                        
-                        custo_total_acumulado = ops_anteriores[ops_anteriores['tipo_operacao'] == 'Compra']['custo_total'].sum()
+                    preco_medio_compra_na_op = float('nan')
+                    lucro_prejuizo_na_op = float('nan')
 
-                        # Subtrair quantidades de vendas e envios anteriores para ter o saldo real
-                        qtd_vendas_anteriores = df_operacoes[
-                            (df_operacoes['wallet_id'] == wallet_id) &
-                            (df_operacoes['cpf_usuario'] == user_cpf) &
-                            (df_operacoes['cripto'] == selected_crypto_symbol) &
-                            ((df_operacoes['tipo_operacao'] == 'Venda') | (df_operacoes['tipo_operacao'] == 'Envio'))
-                        ]['quantidade'].sum()
+                    # O custo_total que será salvo é sempre em BRL
+                    custo_total_final_brl = valor_em_brl_preview
 
-                        saldo_atual_antes_venda = qtd_acumulada - qtd_vendas_anteriores
+                    if current_op_type == "Compra":
+                        if quantidade > 0:
+                            preco_medio_compra_na_op = custo_total_final_brl / quantidade
+                        else:
+                            preco_medio_compra_na_op = float('nan') # Evita divisão por zero
+                    elif current_op_type == "Venda":
+                        compras_anteriores = df_operacoes_existentes[
+                            (df_operacoes_existentes['wallet_id'] == wallet_id) &
+                            (df_operacoes_existentes['cpf_usuario'] == user_cpf) &
+                            (df_operacoes_existentes['tipo_operacao'] == 'Compra') &
+                            (df_operacoes_existentes['cripto'] == cripto_symbol) & # Usar o símbolo aqui
+                            (df_operacoes_existentes['data_operacao'] <= data_hora_completa)
+                        ]
 
-                        if quantidade_op > saldo_atual_antes_venda:
-                            st.error(f"Quantidade de venda ({format_number_br(quantidade_op, 8)}) excede o saldo disponível ({format_number_br(saldo_atual_antes_venda, 8)}) de {selected_crypto_display_name}.")
-                            st.stop() # Interrompe a execução
-                        
-                        custo_medio_ponderado_anterior = 0.0
-                        if qtd_acumulada > 0: # Não pode dividir por zero
-                            # Recalcular custo_total_ativo
-                            # O custo_total_ativo precisa subtrair o custo-base das vendas anteriores
-                            
-                            # Soma o custo_total de todas as Compras
-                            total_comprado_historico = df_operacoes[
-                                (df_operacoes['wallet_id'] == wallet_id) &
-                                (df_operacoes['cpf_usuario'] == user_cpf) &
-                                (df_operacoes['cripto'] == selected_crypto_symbol) &
-                                (df_operacoes['tipo_operacao'] == 'Compra')
-                            ]['custo_total'].sum() or 0.0
+                        if not compras_anteriores.empty and compras_anteriores['quantidade'].sum() > 0:
+                            total_custo_compras = compras_anteriores['custo_total'].sum()
+                            total_quantidade_compras = compras_anteriores['quantidade'].sum()
 
-                            # Soma a quantidade de todas as Compras e Recebimentos
-                            total_qtd_comprada_recebida_historico = df_operacoes[
-                                (df_operacoes['wallet_id'] == wallet_id) &
-                                (df_operacoes['cpf_usuario'] == user_cpf) &
-                                (df_operacoes['cripto'] == selected_crypto_symbol) &
-                                ((df_operacoes['tipo_operacao'] == 'Compra') | (df_operacoes['tipo_operacao'] == 'Recebimento'))
-                            ]['quantidade'].sum() or 0.0
+                            preco_medio_compra_na_op = total_custo_compras / total_quantidade_compras
 
-                            # Soma a quantidade de todas as Vendas e Envios (para determinar o saldo atual para o cálculo do custo médio)
-                            total_qtd_vendida_enviada_historico = df_operacoes[
-                                (df_operacoes['wallet_id'] == wallet_id) &
-                                (df_operacoes['cpf_usuario'] == user_cpf) &
-                                (df_operacoes['cripto'] == selected_crypto_symbol) &
-                                ((df_operacoes['tipo_operacao'] == 'Venda') | (df_operacoes['tipo_operacao'] == 'Envio'))
-                            ]['quantidade'].sum() or 0.0
-                            
-                            saldo_qtd_ativo_para_custo = total_qtd_comprada_recebida_historico - total_qtd_vendida_enviada_historico
-                            
-                            # Agora, para o custo base das unidades *ainda em carteira*, 
-                            # precisamos de um cálculo mais sofisticado (FIFO, LIFO, Custo Médio).
-                            # Para simplificar, vamos assumir Custo Médio Ponderado para o cálculo do lucro.
-                            # Para a venda, o preco_medio_compra_na_op será o custo médio ponderado atual.
+                            custo_base_da_venda = quantidade * preco_medio_compra_na_op
+                            lucro_prejuizo_na_op = custo_total_final_brl - custo_base_da_venda
+                        else:
+                            preco_medio_compra_na_op = float('nan')
+                            lucro_prejuizo_na_op = float('nan')
+                            st.warning("Não há operações de compra anteriores para calcular o preço médio para esta venda.")
 
-                            if saldo_qtd_ativo_para_custo > 0:
-                                custo_total_para_calculo_medio = total_comprado_historico
-                                
-                                # Subtrair o custo base das vendas *anteriores* para ter o custo base das unidades remanescentes
-                                # Este é um ponto complexo; a maneira mais simples para um MVP é ignorar FIFO/LIFO
-                                # e assumir que cada venda usa o "custo médio" da época da venda para o cálculo do lucro,
-                                # e o custo médio ponderado geral é para o ativo remanescente.
-                                
-                                # Para o cálculo da VENDA, precisamos do custo médio PONDERADO ATUAL.
-                                # O custo_medio_ponderado_anterior é o custo das unidades que *ainda estão* na carteira.
-                                
-                                # Filtrar apenas as compras para calcular o custo médio ponderado para fins de venda
-                                apenas_compras = df_operacoes[
-                                    (df_operacoes['wallet_id'] == wallet_id) &
-                                    (df_operacoes['cpf_usuario'] == user_cpf) &
-                                    (df_operacoes['cripto'] == selected_crypto_symbol) &
-                                    (df_operacoes['tipo_operacao'] == 'Compra')
-                                ]
-                                
-                                # Soma das quantidades e custos das compras
-                                total_comprado_qtd = apenas_compras['quantidade'].sum() or 0.0
-                                total_comprado_custo = apenas_compras['custo_total'].sum() or 0.0
-
-                                if total_comprado_qtd > 0:
-                                    custo_medio_ponderado_anterior = total_comprado_custo / total_comprado_qtd
-                                else:
-                                    custo_medio_ponderado_anterior = 0.0
-
-                                # Se houver vendas anteriores, estas já teriam "realizado" parte do custo.
-                                # Isso é para simplificar: a venda atual usa o custo médio ponderado de *todas as compras* até agora,
-                                # desconsiderando complexidades de FIFO/LIFO entre vendas.
-                                # Para um sistema financeiro real, o ideal seria implementar FIFO/LIFO.
-                                
-                                preco_medio_compra_na_op = custo_medio_ponderado_anterior
-                                lucro_prejuizo_na_op = (custo_total_op - (quantidade_op * preco_medio_compra_na_op))
-                            else:
-                                st.warning("Não há quantidade suficiente da criptomoeda para realizar a venda com custo médio calculado.")
-                                preco_medio_compra_na_op = 0.0
-                                lucro_prejuizo_na_op = custo_total_op # Lucro total se não houver custo base. Isso é um caso de erro ou doação.
-
-                    # Para Envio e Recebimento, custo_total_op é 0, e preco_medio_compra_na_op e lucro_prejuizo_na_op são None/NaN
-                    if tipo_operacao in ["Envio", "Recebimento"]:
-                        custo_total_op = 0.0
-                        preco_medio_compra_na_op = float('nan') # Usar NaN para indicar não aplicável
-                        lucro_prejuizo_na_op = float('nan') # Usar NaN para indicar não aplicável
 
                     nova_operacao = pd.DataFrame([{
                         "id": f"operacao_{uuid.uuid4()}",
                         "wallet_id": wallet_id,
                         "cpf_usuario": user_cpf,
-                        "tipo_operacao": tipo_operacao,
-                        "cripto": selected_crypto_symbol,
-                        "quantidade": quantidade_op,
-                        "custo_total": custo_total_op,
-                        "data_operacao": pd.to_datetime(data_operacao_op),
+                        "tipo_operacao": current_op_type,
+                        "cripto": str(cripto_symbol), # Salva o símbolo (ex: BTC, SOL, MEUCUSTOM)
+                        "cripto_display_name": selected_crypto_for_display['display_name'], # NOVO: Salva o nome de exibição completo
+                        "cripto_image_url": selected_crypto_for_display['image'], # NOVO: Salva a URL da imagem ou emoji
+                        "quantidade": float(quantidade), # Garante que a quantidade é salva como float
+                        "custo_total": custo_total_final_brl, # Salva o valor já convertido para BRL
+                        "data_operacao": data_hora_completa,
                         "preco_medio_compra_na_op": preco_medio_compra_na_op,
                         "lucro_prejuizo_na_op": lucro_prejuizo_na_op,
-                        "ptax_na_op": float('nan'), # Pode ser preenchido se for uma operação em real e a carteira estrangeira
-                        "cripto_display_name": selected_crypto_display_name,
-                        "cripto_image_url": selected_crypto_image_url,
-                        "referencia_transacao": referencia_transacao_op # Salva a referência da transação
+                        "ptax_na_op": ptax_input # Salva a PTAX utilizada
                     }])
+
+                    save_operacoes(pd.concat([df_operacoes_existentes, nova_operacao], ignore_index=True))
+                    st.success("Operação registrada com sucesso!")
                     
-                    save_operacoes(pd.concat([df_operacoes, nova_operacao], ignore_index=True))
-                    st.success(f"Operação de {tipo_operacao} registrada com sucesso para {selected_crypto_display_name}!")
+                    # Limpa os campos do formulário redefinindo os valores no session_state
+                    st.session_state['quantidade_input_value'] = 0.00000001
+                    st.session_state['custo_total_input_value'] = 0.01
+                    st.session_state['ptax_input_value'] = 5.00 
+                    st.session_state['data_op_input_value'] = datetime.today().date()
+                    st.session_state['hora_op_input_value'] = datetime.now().time()
+                    
+                    # Resetar a seleção de cripto para a primeira opção da lista após o registro
+                    st.session_state['selected_crypto_display_name'] = display_options[0] if display_options else None
+                    
                     st.rerun()
 
     st.markdown("---")
-    st.markdown("#### Histórico de Operações")
-    df_operacoes_current = load_operacoes()
-    wallet_ops = df_operacoes_current[
-        (df_operacoes_current['wallet_id'] == wallet_id) &
-        (df_operacoes_current['cpf_usuario'] == user_cpf)
-    ].sort_values(by='data_operacao', ascending=False).reset_index(drop=True)
+    st.markdown("#### Histórico de Operações Desta Carteira")
 
-    if not wallet_ops.empty:
-        # Crie uma cópia para formatação e exibição
-        wallet_ops_display = wallet_ops.copy()
+    op_confirm_placeholder = st.empty()
+    if st.session_state.get('confirm_delete_operation_id'):
+        with op_confirm_placeholder.container():
+            op_to_confirm_delete_id = st.session_state['confirm_delete_operation_id']
+            df_operacoes = load_operacoes()
 
-        # Formatar colunas para exibição
-        wallet_ops_display['data_operacao'] = wallet_ops_display['data_operacao'].dt.strftime('%d/%m/%Y %H:%M')
-        wallet_ops_display['quantidade'] = wallet_ops_display['quantidade'].apply(lambda x: format_number_br(x, 8))
-        wallet_ops_display['custo_total'] = wallet_ops_display['custo_total'].apply(format_currency_brl)
-        wallet_ops_display['preco_medio_compra_na_op'] = wallet_ops_display['preco_medio_compra_na_op'].apply(lambda x: format_currency_brl(x) if pd.notna(x) else '-')
-        
-        # Formata lucro/prejuízo com cor
-        def format_lucro_prejuizo(value):
-            if pd.isna(value):
-                return '-'
-            color = "green" if value > 0 else ("red" if value < 0 else "black")
-            return f"<span style='color:{color}; font-weight:bold;'>{format_currency_brl(value)}</span>"
+            if op_to_confirm_delete_id in df_operacoes['id'].values:
+                op_details = df_operacoes[df_operacoes['id'] == op_to_confirm_delete_id].iloc[0]
+                # Modificar a exibição da quantidade para usar format_number_br
+                op_info_display = (f"{op_details['tipo_operacao']} de {format_number_br(op_details['quantidade'], decimals=8)} "
+                                f"{op_details['cripto_display_name']} ({format_currency_brl(op_details['custo_total'])}) em " # Usa cripto_display_name
+                                f"{op_details['data_operacao'].strftime('%d/%m/%Y %H:%M')}")
 
-        wallet_ops_display['lucro_prejuizo_na_op'] = wallet_ops_display['lucro_prejuizo_na_op'].apply(format_lucro_prejuizo)
-        
-        # Display name e image url
-        wallet_ops_display['Cripto'] = wallet_ops_display['cripto_display_name']
-        wallet_ops_display['Logo'] = wallet_ops_display['cripto_image_url']
+                st.markdown(f"""
+                <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-bottom:20px;">
+                    <h4 style="color:#ff0000; margin-top:0;'>⚠️ Confirmar Exclusão de Operação</h4>
+                    <p>Você tem certeza que deseja excluir a seguinte operação?</p>
+                    <p style="font-weight:bold;">{op_info_display}</p>
+                    <p style="color:#ff0000; font-weight:bold;">Esta ação é irreversível e não poderá ser desfeita.</p>
+                    <p>Deseja realmente continuar?</p>
+                </div>
+                """, unsafe_allow_html=True)
 
-        # Renomear e selecionar colunas para exibição
-        display_columns = [
-            'Logo', 'Cripto', 'tipo_operacao', 'quantidade', 'custo_total', 
-            'preco_medio_compra_na_op', 'lucro_prejuizo_na_op', 'data_operacao',
-            'referencia_transacao', # Adicionada a coluna de referência
-            'id' # Manter o ID para o botão de exclusão
-        ]
-        
-        wallet_ops_display = wallet_ops_display[display_columns].rename(columns={
-            'tipo_operacao': 'Tipo',
-            'quantidade': 'Quantidade',
-            'custo_total': 'Custo/Valor',
-            'data_operacao': 'Data',
-            'preco_medio_compra_na_op': 'Preço Médio (CPA)', # Renomeado para CPA
-            'lucro_prejuizo_na_op': 'Lucro/Prejuízo Realizado',
-            'referencia_transacao': 'Referência da Transação'
-        })
-        
-        # Adicionar coluna de exclusão
-        wallet_ops_display['Ação'] = [f"🗑️ Excluir_{idx}" for idx in wallet_ops_display['id']]
+                col_confirm_op, col_cancel_op = st.columns([0.2, 0.8])
+                with col_confirm_op:
+                    if st.button("Sim, Excluir", key="confirm_op_delete_btn_modal"):
+                        df_ops_after_delete = df_operacoes[df_operacoes['id'] != op_to_confirm_delete_id]
+                        save_operacoes(df_ops_after_delete)
+                        st.success("Operação excluída com sucesso!")
+                        st.session_state['confirm_delete_operation_id'] = None
+                        op_confirm_placeholder.empty()
+                        st.rerun()
+                with col_cancel_op:
+                    if st.button("Cancelar", key="cancel_op_delete_btn_modal"):
+                        st.session_state['confirm_delete_operation_id'] = None
+                        op_confirm_placeholder.empty()
+                        st.rerun()
+            else:
+                st.session_state['confirm_delete_operation_id'] = None
+                op_confirm_placeholder.empty()
+                st.warning("A operação que você tentou excluir não foi encontrada.")
+                st.rerun()
+    else:
+        op_confirm_placeholder.empty()
 
-        st.dataframe(
-            wallet_ops_display,
-            column_config={
-                "Logo": st.column_config.ImageColumn("Logo", help="Logo da Criptomoeda", width="small"),
-                "Cripto": st.column_config.Column("Criptomoeda", width="medium"),
-                "Tipo": st.column_config.Column("Tipo", width="small"),
-                "Quantidade": st.column_config.Column("Quantidade", width="small"),
-                "Custo/Valor": st.column_config.Column("Custo/Valor (BRL)", width="small"),
-                "Preço Médio (CPA)": st.column_config.Column("Preço Médio de Compra Adquirido (BRL)", width="small"),
-                "Lucro/Prejuízo Realizado": st.column_config.Column("Lucro/Prejuízo Realizado (BRL)", width="small", help="Lucro ou Prejuízo apurado na Venda"),
-                "Data": st.column_config.DatetimeColumn("Data", format="DD/MM/YYYY HH:mm", width="small"),
-                "Referência da Transação": st.column_config.Column("Referência da Transação", width="medium", help="ID ou hash da transação"),
-                "id": None, # Esconde a coluna ID original
-                "Ação": st.column_config.ButtonColumn("Ação", help="Clique para excluir a operação", width="small")
-            },
-            hide_index=True,
-            use_container_width=True
+    df_operacoes = load_operacoes()
+    wallet_operations_all = df_operacoes[
+        (df_operacoes['wallet_id'] == wallet_id) &
+        (df_operacoes['cpf_usuario'] == user_cpf)
+    ].copy()
+
+    wallet_origin_map = df_carteiras.set_index('id')['nacional'].to_dict()
+    wallet_operations_all['origem_carteira'] = wallet_operations_all['wallet_id'].map(wallet_origin_map)
+
+    # Adicionar coluna 'custo_total_usdt' para carteiras estrangeiras
+    wallet_operations_all['custo_total_usdt'] = float('nan')
+    if is_foreign_wallet:
+        # Calcular o valor em USDT para cada operação se for carteira estrangeira
+        # custo_total é em BRL, ptax_na_op é BRL/USDT
+        wallet_operations_all['custo_total_usdt'] = wallet_operations_all.apply(
+            lambda row: row['custo_total'] / row['ptax_na_op'] if pd.notna(row['ptax_na_op']) and row['ptax_na_op'] != 0 else float('nan'),
+            axis=1
         )
 
-        clicked_button = st.experimental_get_query_params().get("Ação")
-        if clicked_button:
-            operation_id_to_delete = clicked_button[0].replace("🗑️ Excluir_", "")
-            st.session_state['confirm_delete_operation_id'] = operation_id_to_delete
-            st.experimental_set_query_params() # Limpa o query param para evitar re-execução
-            st.rerun()
 
-    else:
-        st.info("Nenhuma operação registrada para esta carteira ainda.")
+    st.markdown("##### Filtros")
+    col_filter1, col_filter2, col_filter3 = st.columns(3)
 
-    # Modal de confirmação de exclusão de operação
-    operation_confirm_placeholder = st.empty()
-    if st.session_state.get('confirm_delete_operation_id'):
-        with operation_confirm_placeholder.container():
-            op_to_confirm_delete_id = st.session_state['confirm_delete_operation_id']
-            op_details = wallet_ops[wallet_ops['id'] == op_to_confirm_delete_id].iloc[0]
-            op_display = f"{op_details['tipo_operacao']} de {op_details['quantidade']} {op_details['cripto_display_name']} em {op_details['data_operacao'].strftime('%d/%m/%Y %H:%M')}"
+    with col_filter1:
+        all_types = ['Compra', 'Venda']
+        filter_type = st.multiselect("Tipo", all_types, key="filter_op_type")
 
-            st.markdown(f"""
-            <div style="background-color:#ffebeb; border:1px solid #ff0000; border-radius:5px; padding:10px; margin-top:20px;">
-                <h4 style="color:#ff0000; margin-top:0;'>⚠️ Confirmar Exclusão de Operação</h4>
-                <p>Você tem certeza que deseja excluir a seguinte operação?</p>
-                <p><strong>{op_display}</strong></p>
-                <p style="color:#ff0000; font-weight:bold;">Esta ação é irreversível!</p>
-                <p>Deseja realmente continuar?</p>
-            </div>
-            """, unsafe_allow_html=True)
+    with col_filter2:
+        # Usar a lista completa de criptos para o filtro, se disponível
+        full_crypto_data_for_filter = cryptocurrencies_data_df
+        # Extrair apenas os display_name para o multiselect
+        all_cryptos_display_names = full_crypto_data_for_filter['display_name'].tolist()
 
-            col_confirm_op, col_cancel_op = st.columns([0.2, 0.8])
-            with col_confirm_op:
-                if st.button("Sim, Excluir", key="confirm_op_delete_btn_modal"):
-                    df_operacoes_updated = df_operacoes_current[df_operacoes_current['id'] != op_to_confirm_delete_id]
-                    save_operacoes(df_operacoes_updated)
-                    st.success(f"Operação excluída com sucesso!")
-                    st.session_state['confirm_delete_operation_id'] = None
-                    operation_confirm_placeholder.empty()
+        # Mapear display_name de volta para symbol para o filtro real
+        filter_display_to_symbol_map = {crypto['display_name']: crypto['symbol'] for crypto in full_crypto_data_for_filter.to_dict('records')}
+
+        filter_crypto_display = st.multiselect("Cripto", all_cryptos_display_names, key="filter_op_crypto")
+        # Converter os display names selecionados de volta para símbolos para filtrar o DataFrame
+        filter_crypto_symbols = [filter_display_to_symbol_map[d_name] for d_name in filter_crypto_display]
+
+
+    with col_filter3:
+        filter_date_range = st.date_input("Data", value=[], key="filter_op_date_range")
+
+    filtered_operations = wallet_operations_all.copy()
+
+    if filter_type:
+        filtered_operations = filtered_operations[filtered_operations['tipo_operacao'].isin(filter_type)]
+    if filter_crypto_symbols: # Usar os símbolos para filtrar
+        filtered_operations = filtered_operations[filtered_operations['cripto'].isin(filter_crypto_symbols)]
+    if filter_date_range and len(filter_date_range) == 2:
+        start_date, end_date = filter_date_range
+        filtered_operations = filtered_operations[
+            (filtered_operations['data_operacao'].dt.date >= start_date) &
+            (filtered_operations['data_operacao'].dt.date <= end_date)
+        ]
+    elif filter_date_range and len(filter_date_range) == 1:
+        single_date = filter_date_range[0]
+        filtered_operations = filtered_operations[filtered_operations['data_operacao'].dt.date == single_date]
+
+    if not filtered_operations.empty:
+        # --- NOVO: Usa diretamente as colunas salvas na operação para exibição ---
+        filtered_operations['crypto_image_html'] = filtered_operations['cripto_image_url'].apply(
+            lambda url: f"<img src='{url}' width='20' height='20' style='vertical-align:middle; margin-right:5px;'>" if url and url != "🪙" else "🪙"
+        )
+        filtered_operations['cripto_text_display'] = filtered_operations['cripto_display_name']
+
+        # Definindo as colunas e seus respectivos ratios (ajustados para a nova coluna "Logo" e "Origem")
+        col_names = [
+            "Tipo", "Logo", "Cripto", "Qtd.", "PTAX",
+            "Valor Total (USDT)", "Valor Total (BRL)", "P. Médio Compra",
+            "P. Médio Venda", "Lucro/Prejuízo", "Data/Hora", "Origem", "Ações"
+        ]
+        # Ajustando os ratios das colunas para caber na tela, 'Origem' aumentada
+        cols_ratio = [0.05, 0.04, 0.10, 0.08, 0.06, 0.09, 0.09, 0.09, 0.09, 0.09, 0.08, 0.09, 0.05] 
+
+        cols = st.columns(cols_ratio)
+        for i, col_name in enumerate(col_names):
+            with cols[i]:
+                st.markdown(f"**{col_name}**")
+        st.markdown("---")
+
+        sorted_operations = filtered_operations.sort_values(by='data_operacao', ascending=False)
+
+        for idx, op_row in sorted_operations.iterrows():
+            cols = st.columns(cols_ratio)
+            with cols[0]:
+                # Colorir o tipo de operação
+                color_tipo = "green" if op_row['tipo_operacao'] == "Compra" else "red"
+                st.markdown(f"<span style='color:{color_tipo}'>{op_row['tipo_operacao']}</span>", unsafe_allow_html=True)
+            with cols[1]: # Nova coluna para a Logo
+                # Se a imagem for o emoji, exibe o emoji diretamente
+                if op_row['crypto_image_html'] == "🪙":
+                    st.markdown("🪙", unsafe_allow_html=True)
+                else:
+                    st.markdown(op_row['crypto_image_html'], unsafe_allow_html=True)
+            with cols[2]: # Coluna Cripto (agora usa o display name)
+                st.write(op_row['cripto_text_display'])
+            with cols[3]:
+                # Formatar a quantidade com ponto e vírgula do Brasil
+                st.write(format_number_br(op_row['quantidade'], decimals=8)) 
+            with cols[4]: # PTAX
+                if pd.notna(op_row['ptax_na_op']):
+                    # Formatar PTAX com 4 casas decimais
+                    st.write(format_number_br(op_row['ptax_na_op'], decimals=4))
+                else:
+                    st.write("-")
+            with cols[5]: # Valor Total (USDT)
+                if is_foreign_wallet and pd.notna(op_row['custo_total_usdt']):
+                    # Formatar Valor Total (USDT) com 2 casas decimais
+                    st.write(f'USDT {format_number_br(op_row["custo_total_usdt"], decimals=2)}')
+                else:
+                    st.write("-")
+            with cols[6]: # Valor Total (BRL)
+                st.write(format_currency_brl(op_row['custo_total']))
+            with cols[7]:
+                if op_row['tipo_operacao'] == 'Compra' and pd.notna(op_row['preco_medio_compra_na_op']):
+                    st.write(format_currency_brl(op_row['preco_medio_compra_na_op']))
+                elif op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['preco_medio_compra_na_op']):
+                    st.write(format_currency_brl(op_row['preco_medio_compra_na_op']))
+                else:
+                    st.write("-")
+            with cols[8]:
+                if op_row['tipo_operacao'] == 'Venda' and op_row['quantidade'] > 0:
+                    st.write(format_currency_brl(op_row["custo_total"] / op_row["quantidade"]))
+                else:
+                    st.write("-")
+            with cols[9]:
+                if op_row['tipo_operacao'] == 'Venda' and pd.notna(op_row['lucro_prejuizo_na_op']):
+                    profit_loss = op_row['lucro_prejuizo_na_op']
+                    color = "green" if profit_loss >= 0 else "red"
+                    st.markdown(f"<span style='color:{color}'>{format_currency_brl(profit_loss)}</span>", unsafe_allow_html=True)
+                else:
+                    st.write("-")
+            with cols[10]:
+                st.write(op_row['data_operacao'].strftime('%d/%m/%Y %H:%M'))
+            with cols[11]:
+                st.write(op_row['origem_carteira'])
+            with cols[12]: # Coluna Ações
+                if st.button("🗑️", key=f"delete_op_{op_row['id']}", help="Excluir Operação"):
+                    st.session_state['confirm_delete_operation_id'] = op_row['id']
                     st.rerun()
-            with col_cancel_op:
-                if st.button("Cancelar", key="cancel_op_delete_btn_modal"):
-                    st.session_state['confirm_delete_operation_id'] = None
-                    operation_confirm_placeholder.empty()
-                    st.rerun()
+
+        st.markdown("---")
     else:
-        operation_confirm_placeholder.empty()
+        st.info("Nenhuma operação registrada para esta carteira ou nenhum resultado para os filtros selecionados.")
 
-# --- Funções de Autenticação e Fluxo Principal ---
-def login_page():
-    """Exibe a página de login."""
-    st.title("Bem-vindo(a) ao Cripto Fácil!")
-    st.subheader("Acesse sua conta")
 
-    with st.form("login_form"):
-        email = st.text_input("Email")
-        password = st.text_input("Senha", type="password")
-        login_button = st.form_submit_button("Entrar")
+# --- Funções para Exibição da Tela de Autenticação (Login, Cadastro, Recuperação) ---
+def show_login():
+    """
+    Exibe as telas de autenticação: Login, Cadastro e Esqueceu a Senha.
+    """
+    df = load_users()
 
-        if login_button:
-            df_users = load_users()
-            user = df_users[(df_users['email'] == email) & (df_users['password_hash'] == hash_password(password))]
-            if not user.empty:
+    st.markdown("""
+    <h1 style='text-align:center;'>🟧₿ Cripto Fácil</h1>
+    <p style='text-align:center;color:gray;'>Gestor de criptoativos com relatórios para IRPF</p><hr>
+    """, unsafe_allow_html=True)
+
+    if st.session_state["auth_page"] == "login":
+        with st.form("login_form"):
+            cpf = st.text_input("CPF")
+            senha = st.text_input("Senha", type="password")
+            submitted = st.form_submit_button("Entrar")
+        if submitted:
+            if df.empty:
+                st.error("Nenhum usuário cadastrado.")
+            elif df[(df["cpf"] == cpf) & (df["password_hash"] == hash_password(senha))].empty:
+                st.error("CPF ou senha incorretos.")
+            else:
                 st.session_state["logged_in"] = True
-                st.session_state["cpf"] = user['cpf'].iloc[0]
-                st.session_state["username"] = user['name'].iloc[0]
-                st.success("Login realizado com sucesso!")
+                st.session_state["cpf"] = cpf
+                st.session_state["pagina_atual"] = "Portfólio" # Define a página inicial após o login
                 st.rerun()
-            else:
-                st.error("Email ou senha incorretos.")
-    
-    st.markdown("---")
-    st.markdown("Não tem conta? [Crie uma agora](#cadastro)")
-    st.markdown("Esqueceu sua senha? [Recupere aqui](#esqueci-senha)")
-    
-    st.markdown("<h2 id='cadastro'>Criar nova conta</h2>", unsafe_allow_html=True)
-    with st.form("register_form"):
-        st.subheader("Crie sua conta")
-        new_name = st.text_input("Nome Completo", key="reg_name")
-        new_cpf = st.text_input("CPF (somente números)", max_chars=11, help="Ex: 12345678900", key="reg_cpf")
-        new_phone = st.text_input("Telefone", help="Ex: 5511998765432", key="reg_phone")
-        new_email = st.text_input("Email", key="reg_email")
-        new_password = st.text_input("Senha", type="password", key="reg_password")
-        confirm_password = st.text_input("Confirme a Senha", type="password", key="reg_confirm_password")
-        
-        register_button = st.form_submit_button("Registrar")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.button("Cadastrar‑se", on_click=lambda: st.session_state.update(auth_page="register"), key="btn_cadastrar_login")
+        with col2:
+            st.button("Esqueci minha senha", on_click=lambda: st.session_state.update(auth_page="forgot"), key="btn_esqueci_senha_login")
 
-        if register_button:
-            df_users = load_users()
-            if not re.fullmatch(r'\d{11}', new_cpf):
-                st.error("CPF deve conter exatamente 11 dígitos numéricos.")
-            elif new_email and not re.fullmatch(r'[^@]+@[^@]+\.[^@]+', new_email):
-                st.error("Formato de email inválido.")
-            elif new_cpf in df_users['cpf'].values:
+    elif st.session_state["auth_page"] == "register":
+        with st.form("register_form"):
+            name = st.text_input("Nome completo")
+            cpf = st.text_input("CPF")
+            phone = st.text_input("Telefone")
+            email = st.text_input("E‑mail")
+            password = st.text_input("Senha", type="password")
+            password_confirm = st.text_input("Confirme a senha", type="password") 
+            submitted = st.form_submit_button("Cadastrar")
+        if submitted:
+            if password != password_confirm:
+                st.error("Senhas não coincidem.")
+            elif df[df["cpf"] == cpf].shape[0] > 0:
                 st.error("CPF já cadastrado.")
-            elif new_email in df_users['email'].values:
-                st.error("Email já cadastrado.")
-            elif new_password != confirm_password:
-                st.error("As senhas não conferem.")
-            elif len(new_password) < 6:
-                st.error("A senha deve ter pelo menos 6 caracteres.")
             else:
-                new_user = pd.DataFrame([{
-                    "cpf": new_cpf,
-                    "name": new_name,
-                    "phone": new_phone,
-                    "email": new_email,
-                    "password_hash": hash_password(new_password)
-                }])
-                save_users(pd.concat([df_users, new_user], ignore_index=True))
-                st.success("Conta criada com sucesso! Faça login para continuar.")
+                new_user = pd.DataFrame([{ "cpf": cpf, "name": name, "phone": phone, "email": email, "password_hash": hash_password(password)}])
+                save_users(pd.concat([df, new_user], ignore_index=True))
+                st.success("Cadastro realizado!")
                 st.session_state["auth_page"] = "login"
                 st.rerun()
+        st.button("Voltar", on_click=lambda: st.session_state.update(auth_page="login"), key="btn_voltar_cadastro")
 
-def forgot_password_page():
-    """Exibe a página de recuperação de senha."""
-    st.title("Recuperar Senha")
-
-    if "recovery_step" not in st.session_state:
-        st.session_state["recovery_step"] = "request_email"
-
-    if st.session_state["recovery_step"] == "request_email":
-        st.subheader("Etapa 1: Informe seu Email")
-        with st.form("forgot_password_email_form"):
-            email_forgot = st.text_input("Email cadastrado")
-            submit_email = st.form_submit_button("Enviar Código de Recuperação")
-            if submit_email:
-                df_users = load_users()
-                user_exists = not df_users[df_users['email'] == email_forgot].empty
-                if user_exists:
-                    send_recovery_code(email_forgot)
-                    st.session_state["recovery_step"] = "verify_code"
-                    st.rerun()
-                else:
-                    st.error("Email não encontrado.")
-    
-    elif st.session_state["recovery_step"] == "verify_code":
-        st.subheader("Etapa 2: Verifique o Código")
-        st.info(f"Um código de 6 dígitos foi enviado para {st.session_state.get('reset_email', 'seu email')}. Verifique sua caixa de entrada (e spam).")
-        with st.form("verify_code_form"):
-            input_code = st.text_input("Digite o código de 6 dígitos", max_chars=6)
-            submit_code = st.form_submit_button("Verificar Código")
-            if submit_code:
-                if input_code == st.session_state.get("recovery_code"):
-                    st.session_state["recovery_step"] = "reset_password"
-                    st.success("Código verificado com sucesso!")
-                    st.rerun()
-                else:
-                    st.error("Código incorreto.")
-        if st.button("Voltar", key="btn_voltar_verify"):
-            st.session_state["recovery_step"] = "request_email"
-            st.rerun()
-
-
-    elif st.session_state["recovery_step"] == "reset_password":
-        st.subheader("Etapa 3: Redefinir sua Senha")
-        with st.form("reset_password_form"):
-            new_pass = st.text_input("Nova Senha", type="password")
-            confirm_new_pass = st.text_input("Confirme a Nova Senha", type="password")
-            reset_button = st.form_submit_button("Redefinir Senha")
-            if reset_button:
-                if new_pass != confirm_new_pass:
-                    st.error("As senhas não conferem.")
-                elif len(new_pass) < 6:
-                    st.error("A senha deve ter pelo menos 6 caracteres.")
-                else:
-                    df_users = load_users()
-                    email_to_reset = st.session_state.get("reset_email")
-                    df_users.loc[df_users['email'] == email_to_reset, 'password_hash'] = hash_password(new_pass)
-                    save_users(df_users)
-                    st.success("Senha redefinida com sucesso! Você já pode fazer login.")
-                    # Limpar estados de recuperação e voltar para o login
-                    st.session_state.pop("recovery_step", None)
-                    st.session_state.pop("recovery_code", None)
-                    st.session_state.pop("reset_email", None)
-                    st.session_state["auth_page"] = "login"
-                    st.rerun()
-        if st.button("Voltar", key="btn_voltar_reset"):
-            st.session_state["recovery_step"] = "verify_code"
-            st.rerun()
-    
-    st.markdown("---")
-    if st.button("Voltar para o Login", key="btn_voltar_esqueci"):
-        st.session_state["auth_page"] = "login"
-        st.session_state.pop("recovery_step", None)
-        st.session_state.pop("recovery_code", None)
-        st.session_state.pop("reset_email", None)
-        st.rerun()
+    elif st.session_state["auth_page"] == "forgot":
+        with st.form("forgot_form"):
+            name = st.text_input("Nome Completo")
+            cpf = st.text_input("CPF")
+            email = st.text_input("E-mail")
+            phone = st.text_input("Telefone")
+            submitted = st.form_submit_button("Verificar e Acessar")
+        if submitted:
+            # Encontrar o usuário que corresponde a todas as informações
+            matching_user = df[
+                (df["name"] == name) &
+                (df["cpf"] == cpf) &
+                (df["email"] == email) &
+                (df["phone"] == phone)
+            ]
+            if not matching_user.empty:
+                st.success("Informações verificadas! Você pode agora acessar sua conta.")
+                st.session_state["logged_in"] = True
+                st.session_state["cpf"] = cpf # Usar o CPF encontrado para o login
+                st.session_state["pagina_atual"] = "Portfólio" # Redireciona para o Portfólio após recuperação
+                st.rerun()
+            else:
+                st.error("Dados informados não correspondem a nenhum usuário cadastrado.")
+        st.button("Voltar", on_click=lambda: st.session_state.update(auth_page="login"), key="btn_voltar_esqueci")
 
 # --- Lógica Principal de Execução da Aplicação ---
 # Inicialização do session_state de forma robusta
@@ -1208,11 +1250,11 @@ if 'confirm_delete_account' not in st.session_state:
 if 'delete_account_password_verified' not in st.session_state:
     st.session_state['delete_account_password_verified'] = False
 
+
+# A lógica de persistência de login é a maneira como você inicializa 'logged_in' e 'cpf'
+# Se 'logged_in' já é True na sessão (o que acontece em uma atualização se não for resetado explicitamente),
+# então o usuário permanece logado.
 if st.session_state["logged_in"]:
     show_dashboard()
 else:
-    if st.session_state["auth_page"] == "login":
-        login_page()
-    elif st.session_state["auth_page"] == "forgot_password":
-        forgot_password_page()
-        
+    show_login()
