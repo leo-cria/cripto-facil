@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
-import plotly.express as px
 
 st.set_page_config(page_title="Painel Admin - Cripto Fácil", layout="wide")
 
