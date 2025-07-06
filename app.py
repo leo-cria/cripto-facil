@@ -736,10 +736,10 @@ def show_wallet_details():
 
         tipo_operacao_display = st.radio(
             "Tipo de Operação",
-            ["Compra", "Venda"],
+            ["Compra", "Venda", "Enviar Cripto"],
             horizontal=True,
             key="tipo_op_radio_external",
-            index=["Compra", "Venda"].index(st.session_state['current_tipo_operacao'])
+            index=["Compra", "Venda", "Enviar Cripto"].index(st.session_state['current_tipo_operacao'])
         )
         st.session_state['current_tipo_operacao'] = tipo_operacao_display # Garante que o estado é atualizado
 
@@ -919,6 +919,33 @@ def show_wallet_details():
                             st.warning("Não há operações de compra anteriores para calcular o preço médio para esta venda.")
 
 
+                    
+                if current_op_type == "Enviar Cripto":
+                    # Criar operação de envio
+                    operacao_envio = {
+                        "id": f"operacao_{uuid.uuid4()}",
+                        "wallet_id": wallet_id,
+                        "cpf_usuario": user_cpf,
+                        "tipo_operacao": "Enviar Cripto",
+                        "cripto": str(cripto_symbol),
+                        "cripto_display_name": selected_crypto_for_display['display_name'],
+                        "cripto_image_url": selected_crypto_for_display['image'],
+                        "quantidade": float(quantidade),
+                        "custo_total": custo_total_final_brl,
+                        "data_operacao": data_hora_completa,
+                        "preco_medio_compra_na_op": float('nan'),
+                        "lucro_prejuizo_na_op": float('nan'),
+                        "ptax_na_op": ptax_input
+                    }
+
+                    # Criar operação de recebimento
+                    operacao_recebimento = operacao_envio.copy()
+                    operacao_recebimento["id"] = f"operacao_{uuid.uuid4()}"
+                    operacao_recebimento["wallet_id"] = carteira_destino_id
+                    operacao_recebimento["tipo_operacao"] = "Recebimento"
+
+                    nova_operacao = pd.DataFrame([operacao_envio, operacao_recebimento])
+                else:
                     nova_operacao = pd.DataFrame([{
                         "id": f"operacao_{uuid.uuid4()}",
                         "wallet_id": wallet_id,
@@ -1022,7 +1049,7 @@ def show_wallet_details():
     col_filter1, col_filter2, col_filter3 = st.columns(3)
 
     with col_filter1:
-        all_types = ['Compra', 'Venda']
+        all_types = ['Compra', 'Venda', 'Enviar Cripto', 'Recebimento']
         filter_type = st.multiselect("Tipo", all_types, key="filter_op_type")
 
     with col_filter2:
