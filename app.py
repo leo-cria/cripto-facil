@@ -364,57 +364,57 @@ def show_dashboard():
         user_carteiras_df = df_carteiras[df_carteiras['cpf_usuario'] == user_cpf].copy()
 
         # Formulário de cadastro de nova carteira dentro de um expander
-        with st.expander("➕ Cadastrar nova carteira"):
+        with st.expander("➕ Criar nova carteira"):
             # st.markdown("""
             #     <div style='border:2px solid #e0e0e0; border-radius:10px; padding:20px; background-color:#fafafa;'>
-            #         <h3 style='margin-top:0;'>Cadastrar nova carteira</h3>
+            #         <h3 style='margin-top:0;'>Criar nova carteira</h3>
             #     </div>
             # """, unsafe_allow_html=True) # Removei o markdown para usar o título do expander
 
-            tipo_selecionado_cadastrar = st.radio(
+            tipo_selecionado_criar = st.radio(
                 "Tipo de carteira",
                 ["Auto Custódia", "Corretora", "Banco"], # Adicionado "Banco"
-                key="tipo_carteira_selection_global_cadastrar",
+                key="tipo_carteira_selection_global_criar",
                 horizontal=True
             )
 
             with st.form("form_add_carteira"):
-                nome_input_cadastrar = ""
-                info1_input_cadastrar = ""
-                info2_input_cadastrar = ""
+                nome_input_criar = ""
+                info1_input_criar = ""
+                info2_input_criar = ""
 
                 if tipo_selecionado_criar == "Auto Custódia":
-                    nome_input_cadastrar = st.selectbox("Rede", ["ETHEREUM", "SOLANA", "BITCOIN", "BASE"], key="rede_selector_cadastrar")
-                    info1_input_cadastrar = st.text_input("Endereço da carteira", key="endereco_field_cadastrar")
+                    nome_input_criar = st.selectbox("Rede", ["ETHEREUM", "SOLANA", "BITCOIN", "BASE"], key="rede_selector_criar")
+                    info1_input_criar = st.text_input("Endereço da carteira", key="endereco_field_criar")
                 elif tipo_selecionado_criar == "Corretora":
-                    nome_input_cadastrar = st.selectbox("Corretora", ["BINANCE", "BYBIT", "COINBASE", "OKX", "MEXC", "MERCADO BITCOIN"], key="corretora_selector_cadastrar")
+                    nome_input_criar = st.selectbox("Corretora", ["BINANCE", "BYBIT", "COINBASE", "OKX", "MEXC", "MERCADO BITCOIN"], key="corretora_selector_criar")
                     pass
-                elif tipo_selecionado_cadastrar == "Banco": 
-                    nome_input_cadastrar = st.selectbox("Banco", ["NUBANK", "ITAU", "MERCADO PAGO"], key="banco_selector_cadastrar")
+                elif tipo_selecionado_criar == "Banco": # NOVO: Campos para tipo "Banco"
+                    nome_input_criar = st.selectbox("Banco", ["NUBANK", "ITAU", "MERCADO PAGO"], key="banco_selector_criar")
                     # info1 e info2 podem ser usados para agência/conta se necessário, por enquanto vazios
                     pass
 
-                nacional_input_cadastrar = st.radio("Origem da carteira:", ["Nacional", "Estrangeira"], key="nacionalidade_radio_field_cadastrar")
+                nacional_input_criar = st.radio("Origem da carteira:", ["Nacional", "Estrangeira"], key="nacionalidade_radio_field_criar")
 
-                enviado_cadastrar = st.form_submit_button("Cadastrar carteira ➕")
-                if enviado_cadastrar:
-                    if tipo_selecionado_cadastrar == "Auto Custódia" and (not nome_input_cadastrar or not info1_input_cadastrar):
+                enviado_criar = st.form_submit_button("Criar carteira ➕")
+                if enviado_criar:
+                    if tipo_selecionado_criar == "Auto Custódia" and (not nome_input_criar or not info1_input_criar):
                         st.error("Por favor, preencha todos os campos obrigatórios para Auto Custódia.")
-                    elif (tipo_selecionado_cadastrar == "Corretora" or tipo_selecionado_cadastrar == "Banco") and not nome_input_cadastrar:
-                        st.error(f"Por favor, selecione uma {tipo_selecionado_cadastrar.lower()}.")
+                    elif (tipo_selecionado_criar == "Corretora" or tipo_selecionado_criar == "Banco") and not nome_input_criar:
+                        st.error(f"Por favor, selecione uma {tipo_selecionado_criar.lower()}.")
                     else:
                         nova_carteira = pd.DataFrame([{
                             "id": f"carteira_{uuid.uuid4()}",
-                            "tipo": tipo_selecionado_cadastrar,
-                            "nome": nome_input_cadastrar,
-                            "nacional": nacional_input_cadastrar,
-                            "info1": info1_input_cadastrar,
-                            "info2": info2_input_cadastrar,
+                            "tipo": tipo_selecionado_criar,
+                            "nome": nome_input_criar,
+                            "nacional": nacional_input_criar,
+                            "info1": info1_input_criar,
+                            "info2": info2_input_criar,
                             "cpf_usuario": user_cpf
                         }])
                         current_carteiras_df = load_carteiras()
                         save_carteiras(pd.concat([current_carteiras_df, nova_carteira], ignore_index=True))
-                        st.success("Carteira cadastrada com sucesso!")
+                        st.success("Carteira criada com sucesso!")
                         st.rerun()
 
         st.subheader("Minhas carteiras")
@@ -736,11 +736,12 @@ def show_wallet_details():
 
         tipo_operacao_display = st.radio(
             "Tipo de Operação",
-            ["Compra", "Venda", "Enviar Cripto"],
+            ["Compra", "Venda"],
             horizontal=True,
-            key="current_tipo_operacao",
-            on_change=st.rerun
-            )
+            key="tipo_op_radio_external",
+            index=["Compra", "Venda"].index(st.session_state['current_tipo_operacao'])
+        )
+        st.session_state['current_tipo_operacao'] = tipo_operacao_display # Garante que o estado é atualizado
 
         # Carrega a lista de dicionários de criptomoedas
         _, cryptocurrencies_data_df = load_cryptocurrencies_from_file()
@@ -918,33 +919,6 @@ def show_wallet_details():
                             st.warning("Não há operações de compra anteriores para calcular o preço médio para esta venda.")
 
 
-                    
-                if current_op_type == "Enviar Cripto":
-                    # Criar operação de envio
-                    operacao_envio = {
-                        "id": f"operacao_{uuid.uuid4()}",
-                        "wallet_id": wallet_id,
-                        "cpf_usuario": user_cpf,
-                        "tipo_operacao": "Enviar Cripto",
-                        "cripto": str(cripto_symbol),
-                        "cripto_display_name": selected_crypto_for_display['display_name'],
-                        "cripto_image_url": selected_crypto_for_display['image'],
-                        "quantidade": float(quantidade),
-                        "custo_total": custo_total_final_brl,
-                        "data_operacao": data_hora_completa,
-                        "preco_medio_compra_na_op": float('nan'),
-                        "lucro_prejuizo_na_op": float('nan'),
-                        "ptax_na_op": ptax_input
-                    }
-
-                    # Criar operação de recebimento
-                    operacao_recebimento = operacao_envio.copy()
-                    operacao_recebimento["id"] = f"operacao_{uuid.uuid4()}"
-                    operacao_recebimento["wallet_id"] = carteira_destino_id
-                    operacao_recebimento["tipo_operacao"] = "Recebimento"
-
-                    nova_operacao = pd.DataFrame([operacao_envio, operacao_recebimento])
-                else:
                     nova_operacao = pd.DataFrame([{
                         "id": f"operacao_{uuid.uuid4()}",
                         "wallet_id": wallet_id,
@@ -1048,7 +1022,7 @@ def show_wallet_details():
     col_filter1, col_filter2, col_filter3 = st.columns(3)
 
     with col_filter1:
-        all_types = ['Compra', 'Venda', 'Enviar Cripto', 'Recebimento']
+        all_types = ['Compra', 'Venda']
         filter_type = st.multiselect("Tipo", all_types, key="filter_op_type")
 
     with col_filter2:
